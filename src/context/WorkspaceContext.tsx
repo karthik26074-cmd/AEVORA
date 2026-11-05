@@ -148,7 +148,10 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // 3. Real-Time WebSocket stream connection for instant sync across tabs & operations
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.port === '5173' ? 'localhost:3001' : window.location.host;
+    let host = window.location.port === '5173' ? 'localhost:3001' : window.location.host;
+    if (window.location.hostname.includes('web.app') || window.location.hostname.includes('firebaseapp.com')) {
+      host = 'aevora-l23m.onrender.com';
+    }
     const wsUrl = `${protocol}//${host}/ws`;
 
     let ws: WebSocket | null = null;
