@@ -201,6 +201,7 @@ class EventsDbService extends EventEmitter {
         github_id INTEGER,
         full_name TEXT NOT NULL,
         workspace_id TEXT NOT NULL,
+        user_id TEXT,
         webhook_id INTEGER,
         status TEXT NOT NULL DEFAULT 'active',
         connected_at TEXT NOT NULL,
@@ -208,6 +209,10 @@ class EventsDbService extends EventEmitter {
         event_count INTEGER DEFAULT 0
       )
     `);
+    const repoCols = (this.db.prepare("PRAGMA table_info(repositories)").all() as any[]).map((c) => c.name);
+    if (!repoCols.includes('user_id')) {
+      this.db.exec('ALTER TABLE repositories ADD COLUMN user_id TEXT');
+    }
     const cols = (this.db.prepare("PRAGMA table_info(events)").all() as any[]).map((c) => c.name);
     if (!cols.includes('related_source_id')) {
       this.db.exec('ALTER TABLE events ADD COLUMN related_source_id TEXT');

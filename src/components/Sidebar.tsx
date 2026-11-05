@@ -205,16 +205,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <img src={user.photoUrl} alt="Avatar" className="w-7 h-7 rounded-lg object-cover flex-shrink-0" />
             ) : (
               <div className="w-7 h-7 rounded-lg bg-brand-primary/15 text-brand-primary flex items-center justify-center font-bold text-[10px] flex-shrink-0">
-                {user.displayName ? user.displayName.slice(0, 2).toUpperCase() : 'JA'}
+                {user.displayName
+                  ? user.displayName.slice(0, 2).toUpperCase()
+                  : user.email
+                  ? user.email.slice(0, 2).toUpperCase()
+                  : 'US'}
               </div>
             )}
             {(!collapsed || mobileOpen) && (
               <div className="flex-1 min-w-0">
                 <p className="text-[11px] font-semibold text-brand-dark dark:text-white truncate leading-tight">
-                  {user.displayName || 'Jain'}
+                  {user.displayName || (user.email ? user.email.split('@')[0] : 'User')}
                 </p>
                 <p className="text-[9px] text-brand-secondary truncate leading-tight">
-                  {user.email || 'jain@gmail.com'}
+                  {user.email || 'Authenticated User'}
                 </p>
               </div>
             )}

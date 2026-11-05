@@ -49,11 +49,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (isFirebaseConfigured && auth) {
       const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
         if (fbUser) {
+          const email = fbUser.email || fbUser.providerData?.find((p) => p.email)?.email || '';
+          const displayName =
+            fbUser.displayName ||
+            fbUser.providerData?.find((p) => p.displayName)?.displayName ||
+            (email ? email.split('@')[0] : 'User');
+          const photoUrl = fbUser.photoURL || fbUser.providerData?.find((p) => p.photoURL)?.photoURL || undefined;
           const mappedUser: User = {
             id: fbUser.uid,
-            email: fbUser.email || '',
-            displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
-            photoUrl: fbUser.photoURL || undefined,
+            email,
+            displayName,
+            photoUrl,
             role: 'admin',
             createdAt: new Date().toISOString(),
           };
@@ -192,11 +198,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           pendingCredentialRef.current = null;
         }
 
+        const email = cred.user.email || cred.user.providerData?.find((p) => p.email)?.email || '';
+        const displayName =
+          cred.user.displayName ||
+          cred.user.providerData?.find((p) => p.displayName)?.displayName ||
+          (email ? email.split('@')[0] : 'Google User');
+        const photoUrl = cred.user.photoURL || cred.user.providerData?.find((p) => p.photoURL)?.photoURL || undefined;
+
         const mappedUser: User = {
           id: cred.user.uid,
-          email: cred.user.email || '',
-          displayName: cred.user.displayName || 'Google User',
-          photoUrl: cred.user.photoURL || undefined,
+          email,
+          displayName,
+          photoUrl,
           role: 'admin',
           createdAt: new Date().toISOString(),
         };
@@ -239,6 +252,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (includePrivate) {
           provider.addScope('repo');
         }
+        provider.setCustomParameters({ prompt: 'select_account' });
         if (promptSelectAccount) {
           provider.setCustomParameters({ prompt: 'select_account' });
         }
@@ -284,11 +298,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
+        const email = cred.user.email || cred.user.providerData?.find((p) => p.email)?.email || '';
+        const displayName =
+          cred.user.displayName ||
+          cred.user.providerData?.find((p) => p.displayName)?.displayName ||
+          (email ? email.split('@')[0] : 'GitHub Developer');
+        const photoUrl = cred.user.photoURL || cred.user.providerData?.find((p) => p.photoURL)?.photoURL || undefined;
+
         const mappedUser: User = {
           id: cred.user.uid,
-          email: cred.user.email || '',
-          displayName: cred.user.displayName || 'GitHub Developer',
-          photoUrl: cred.user.photoURL || undefined,
+          email,
+          displayName,
+          photoUrl,
           role: 'admin',
           createdAt: new Date().toISOString(),
         };
@@ -325,6 +346,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (includePrivate) {
           provider.addScope('repo');
         }
+        provider.setCustomParameters({ prompt: 'select_account' });
 
         let accessToken: string | undefined;
         let mappedUid = auth.currentUser.uid;

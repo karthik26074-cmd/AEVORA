@@ -126,14 +126,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ darkMode, setDarkMod
   };
 
   // Derive display initials
-  const displayName = user?.displayName || 'Jain';
-  const displayEmail = user?.email || 'jain@gmail.com';
-  const displayInitials = displayName
-    .split(' ')
+  const displayName = user?.displayName || (user?.email ? user.email.split('@')[0] : 'User');
+  const displayEmail = user?.email || 'Authenticated User';
+  const displayInitials = (user?.displayName || user?.email || 'US')
+    .split(/[\s.@_-]+/)
+    .filter(Boolean)
     .map((n) => n[0])
     .join('')
     .slice(0, 2)
-    .toUpperCase() || 'JA';
+    .toUpperCase() || 'US';
 
   return (
     <div className="space-y-6 animate-fade-in pb-16 max-w-4xl">

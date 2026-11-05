@@ -106,19 +106,12 @@ export class GitHubService {
   }
 
   public getStatus(userId: string) {
-    let row = this.db.prepare('SELECT github_username, avatar_url, scopes, updated_at FROM user_github_tokens WHERE user_id = ?').get(userId) as any;
-    if (!row) {
-      // Check if an active token exists from an alternate login method in this environment
-      const all = this.db.prepare('SELECT github_username, avatar_url, scopes, updated_at FROM user_github_tokens ORDER BY updated_at DESC').all() as any[];
-      if (all.length > 0) {
-        row = all[0];
-      }
-    }
+    const row = this.db.prepare('SELECT github_username, avatar_url, scopes, updated_at FROM user_github_tokens WHERE user_id = ?').get(userId) as any;
     if (!row) {
       return { connected: false };
     }
 
-    const tracked = this.db.prepare('SELECT * FROM repositories WHERE status = ?').all('active') as any[];
+    const tracked = this.db.prepare('SELECT * FROM repositories WHERE user_id = ? AND status = ?').all(userId, 'active') as any[];
 
     return {
       connected: true,
@@ -133,21 +126,15 @@ export class GitHubService {
 
   public async disconnect(userId: string) {
     this.db.prepare('DELETE FROM user_github_tokens WHERE user_id = ?').run(userId);
-    this.db.prepare('DELETE FROM user_github_tokens').run();
+    this.db.prepare('DELETE FROM repositories WHERE user_id = ?').run(userId);
     this.repoCache.clear();
     return { success: true };
   }
 
   private getDecryptedToken(userId: string): { token: string; scopes: string } {
-    let row = this.db.prepare('SELECT encrypted_token, iv, auth_tag, scopes FROM user_github_tokens WHERE user_id = ?').get(userId) as any;
+    const row = this.db.prepare('SELECT encrypted_token, iv, auth_tag, scopes FROM user_github_tokens WHERE user_id = ?').get(userId) as any;
     if (!row) {
-      const all = this.db.prepare('SELECT encrypted_token, iv, auth_tag, scopes FROM user_github_tokens ORDER BY updated_at DESC').all() as any[];
-      if (all.length > 0) {
-        row = all[0];
-      }
-    }
-    if (!row) {
-      throw new GitHubApiError('GitHub not connected or token invalid. Please reconnect GitHub.', 401, 'RECONNECT_REQUIRED');
+      throw new GitHubApiError('GitHub not connected for this user account. Please connect your GitHub account.', 401, 'RECONNECT_REQUIRED');
     }
     return {
       token: decryptToken(row.encrypted_token, row.iv, row.auth_tag),
@@ -245,13 +232,13 @@ export class GitHubService {
     }));
 
     return {
-      repositories: this.enrichWithTrackedStatus(repos),
+      repositories: this.enrichWithTrackedStatus(repos, userId),
       scopes: latestScopes,
     };
   }
 
-  private enrichWithTrackedStatus(repos: GitHubRepoItem[]): GitHubRepoItem[] {
-    const trackedRows = this.db.prepare('SELECT full_name, status, last_sync_at, event_count FROM repositories').all() as any[];
+  private enrichWithTrackedStatus(repos: GitHubRepoItem[], userId: string): GitHubRepoItem[] {
+    const trackedRows = this.db.prepare('SELECT full_name, status, last_sync_at, event_count FROM repositories WHERE user_id = ?').all(userId) as any[];
     const map = new Map<string, any>();
     trackedRows.forEach((r) => map.set(r.full_name.toLowerCase(), r));
 
@@ -364,9 +351,9 @@ export class GitHubService {
 
     this.db.prepare(`
       INSERT OR REPLACE INTO repositories
-        (id, github_id, full_name, workspace_id, webhook_id, status, connected_at, last_sync_at, event_count)
-      VALUES (?, ?, ?, ?, ?, 'active', ?, ?, 0)
-    `).run(repoId, repoData.id, cleanRepo, effectiveWorkspaceId, webhookId, now, now);
+        (id, github_id, full_name, workspace_id, user_id, webhook_id, status, connected_at, last_sync_at, event_count)
+      VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, 0)
+    `).run(repoId, repoData.id, cleanRepo, effectiveWorkspaceId, userId, webhookId, now, now);
 
     // Initial sync of last 100 commits & recent issues/PRs
     const syncCount = await this.syncRepo(userId, effectiveWorkspaceId, cleanRepo);
@@ -397,7 +384,7 @@ export class GitHubService {
 
   public async untrackRepo(userId: string, repoFullName: string) {
     const cleanRepo = repoFullName.trim();
-    const row = this.db.prepare('SELECT webhook_id FROM repositories WHERE full_name = ?').get(cleanRepo) as any;
+    const row = this.db.prepare('SELECT webhook_id FROM repositories WHERE full_name = ? AND user_id = ?').get(cleanRepo, userId) as any;
 
     if (row?.webhook_id) {
       try {
@@ -415,7 +402,7 @@ export class GitHubService {
       }
     }
 
-    this.db.prepare('DELETE FROM repositories WHERE full_name = ?').run(cleanRepo);
+    this.db.prepare('DELETE FROM repositories WHERE full_name = ? AND user_id = ?').run(cleanRepo, userId);
     return { success: true };
   }
 

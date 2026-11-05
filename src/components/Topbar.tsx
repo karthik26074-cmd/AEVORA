@@ -418,7 +418,11 @@ export const Topbar: React.FC<TopbarProps> = ({
               <img src={user.photoUrl} alt="Avatar" className="w-7 h-7 rounded-lg object-cover" />
             ) : (
               <div className="w-7 h-7 rounded-lg bg-brand-primary/15 text-brand-primary flex items-center justify-center font-bold text-xs">
-                {user?.displayName ? user.displayName.slice(0, 2).toUpperCase() : 'JA'}
+                {user?.displayName
+                  ? user.displayName.slice(0, 2).toUpperCase()
+                  : user?.email
+                  ? user.email.slice(0, 2).toUpperCase()
+                  : 'US'}
               </div>
             )}
             <ChevronDown size={14} className="text-brand-secondary hidden sm:inline" />
@@ -428,10 +432,10 @@ export const Topbar: React.FC<TopbarProps> = ({
             <div className="absolute top-12 right-0 w-56 bg-brand-surface dark:bg-brand-dark-card rounded-2xl shadow-elevated border border-brand-border dark:border-brand-dark-border py-2 z-50">
               <div className="px-4 py-2 border-b border-brand-border dark:border-brand-dark-border">
                 <p className="text-xs font-bold text-brand-dark dark:text-white truncate">
-                  {user?.displayName || 'Jain'}
+                  {user?.displayName || (user?.email ? user.email.split('@')[0] : 'User')}
                 </p>
                 <p className="text-[10px] text-brand-secondary truncate">
-                  {user?.email || 'jain@gmail.com'}
+                  {user?.email || 'Authenticated User'}
                 </p>
               </div>
 
