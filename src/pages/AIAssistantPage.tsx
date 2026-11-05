@@ -87,6 +87,29 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({ onNavigate }) 
   const recognitionRef = useRef<any>(null);
 
   const [expandedCitationIndex, setExpandedCitationIndex] = useState<string | null>(null);
+  const [liveGitHubOnly, setLiveGitHubOnly] = useState<boolean>(false);
+
+  const SEED_SOURCE_IDS = [
+    'gh-pr-104-otp-verified',
+    'sec-audit-otp-mod',
+    'prd-auth-v1-otp',
+    'gh-pr-112-rename-checkout',
+    'jira-bank-201-payment-approved',
+    'gh-commit-gateway-router',
+    'gh-commit-reconciliation-worker',
+    'jira-bank-205-passkey-proposed',
+  ];
+
+  const isDemoCitation = (sourceId?: string): boolean => {
+    if (!sourceId) return false;
+    return (
+      SEED_SOURCE_IDS.includes(sourceId) ||
+      sourceId.startsWith('sample-') ||
+      sourceId.startsWith('prd-auth') ||
+      sourceId.startsWith('jira-bank') ||
+      sourceId.includes('seed')
+    );
+  };
 
   useEffect(() => {
     fetch('/api/settings')
@@ -287,7 +310,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({ onNavigate }) 
     }
 
     try {
-      const response = await askAI(q);
+      const response = await askAI(q, liveGitHubOnly);
       setMessages((prev) => [...prev, response]);
       speakText(response.content);
 
@@ -364,6 +387,21 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({ onNavigate }) 
           >
             {ttsEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
             <span>Voice {ttsEnabled ? 'On' : 'Off'}</span>
+          </button>
+
+          {/* Live GitHub Only Toggle */}
+          <button
+            type="button"
+            onClick={() => setLiveGitHubOnly(!liveGitHubOnly)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
+              liveGitHubOnly
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                : 'border-brand-border dark:border-brand-dark-border text-brand-secondary hover:text-brand-dark dark:hover:text-white'
+            }`}
+            title="When active, queries and overview facts use live GitHub records only"
+          >
+            <span className={`w-2 h-2 rounded-full ${liveGitHubOnly ? 'bg-emerald-500' : 'bg-brand-secondary/40'}`} />
+            <span>Live GitHub only</span>
           </button>
 
           {/* Gemini Key Config Button */}
@@ -551,6 +589,11 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({ onNavigate }) 
                                   <span className="uppercase text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-brand-primary/20">
                                     {cit.event_type || 'event'}
                                   </span>
+                                  {isDemoCitation(cit.source_id) && (
+                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                                      Demo data
+                                    </span>
+                                  )}
                                   {cit.event_date && (
                                     <span className="font-mono text-[10px] text-brand-secondary">
                                       {cit.event_date}

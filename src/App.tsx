@@ -34,6 +34,7 @@ import {
   GitBranch,
   Settings,
   Link2,
+  Menu,
 } from 'lucide-react';
 
 const MainApp: React.FC = () => {
@@ -42,6 +43,7 @@ const MainApp: React.FC = () => {
 
   const [currentTab, setCurrentTab] = useState<string>('overview');
   const [collapsed, setCollapsed] = useState<boolean>(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     return localStorage.getItem('aevora_theme') === 'dark';
   });
@@ -80,12 +82,12 @@ const MainApp: React.FC = () => {
     { id: 'features', icon: Layers, label: 'Features' },
     { id: 'timeline', icon: GitCommit, label: 'Timeline' },
     { id: 'connected-sources', icon: Link2, label: 'Sources' },
-    { id: 'ai', icon: Sparkles, label: 'AI' },
+    { id: 'mobile_menu', icon: Menu, label: 'Menu' },
   ];
 
   return (
     <div className="min-h-screen bg-brand-bg dark:bg-brand-dark text-brand-text dark:text-gray-100 flex transition-colors">
-      {/* Desktop Left Sidebar */}
+      {/* Desktop Left Sidebar & Mobile Slide-Out Drawer */}
       <Sidebar
         currentTab={currentTab}
         setCurrentTab={setCurrentTab}
@@ -94,6 +96,8 @@ const MainApp: React.FC = () => {
         onOpenDemo={() => setIsDemoOpen(true)}
         darkMode={darkMode}
         setDarkMode={setDarkMode}
+        mobileOpen={mobileMenuOpen}
+        onCloseMobile={() => setMobileMenuOpen(false)}
       />
 
       {/* Top Navigation Bar */}
@@ -105,6 +109,7 @@ const MainApp: React.FC = () => {
           setCurrentTab('features');
         }}
         setCurrentTab={setCurrentTab}
+        onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
       />
 
       {/* Main Content Area */}
@@ -148,7 +153,7 @@ const MainApp: React.FC = () => {
 
           {currentTab === 'developer-updates' && <ActivityPage defaultView="DEVELOPERS" />}
 
-          {currentTab === 'connected-sources' && (
+          {(currentTab === 'connected-sources' || currentTab === 'sources') && (
             <ConnectedSourcesPage
               onNavigateToTab={(tab) => setCurrentTab(tab)}
               onSelectFeature={(featId) => {
@@ -179,16 +184,24 @@ const MainApp: React.FC = () => {
       </main>
 
       {/* Mobile Bottom Navigation Bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-brand-surface/95 dark:bg-brand-dark/95 backdrop-blur-md border-t border-brand-border dark:border-brand-dark-border px-3 py-2 flex items-center justify-around shadow-lg">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-brand-surface/95 dark:bg-brand-dark/95 backdrop-blur-md border-t border-brand-border dark:border-brand-dark-border px-3 py-2 flex items-center justify-around shadow-lg">
         {mobileNavItems.map((item) => {
           const Icon = item.icon;
-          const isActive = currentTab === item.id;
+          const isActive = item.id === 'mobile_menu' ? mobileMenuOpen : currentTab === item.id;
           return (
             <button
               key={item.id}
-              onClick={() => setCurrentTab(item.id)}
-              className={`flex flex-col items-center gap-1 p-1 rounded-xl text-[10px] font-bold ${isActive ? 'text-brand-primary' : 'text-brand-secondary hover:text-brand-dark'
-                }`}
+              onClick={() => {
+                if (item.id === 'mobile_menu') {
+                  setMobileMenuOpen(!mobileMenuOpen);
+                } else {
+                  setCurrentTab(item.id);
+                  setMobileMenuOpen(false);
+                }
+              }}
+              className={`flex flex-col items-center gap-1 p-1 rounded-xl text-[10px] font-bold transition-colors ${
+                isActive ? 'text-brand-primary' : 'text-brand-secondary hover:text-brand-dark dark:hover:text-white'
+              }`}
             >
               <Icon size={18} />
               <span>{item.label}</span>

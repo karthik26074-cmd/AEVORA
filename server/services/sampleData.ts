@@ -16,6 +16,9 @@ export const SAMPLE_WORKSPACE_ID = 'sample-workspace-smart-banking';
 export const SAMPLE_USER_ID = 'sample-user-alex-morgan';
 
 export function seedSampleWorkspace(force = false) {
+  if (process.env.DEMO_MODE !== 'true' && !force) {
+    return null;
+  }
   const existing = db.getWorkspaceById(SAMPLE_WORKSPACE_ID);
   const existingEvents = db.getFeatureEvents(SAMPLE_WORKSPACE_ID);
   if (existing && existingEvents.length >= 8 && !force) {

@@ -20,6 +20,13 @@ import {
 
 const router = Router();
 
+function getEffectiveWorkspaceId(id?: string): string {
+  if (id && id !== SAMPLE_WORKSPACE_ID) return id;
+  const workspaces = db.getWorkspaces();
+  return workspaces[0]?.id || 'ws-main';
+}
+
+
 // Configure multer file upload
 const uploadDir = path.resolve(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -133,9 +140,23 @@ router.get('/workspaces', (req: Request, res: Response) => {
   const userId = req.query.userId as string | undefined;
   let workspaces = db.getWorkspaces(userId);
   if (workspaces.length === 0) {
-    // Automatically seed sample workspace on cold launch
-    seedSampleWorkspace();
-    workspaces = db.getWorkspaces(userId);
+    if (process.env.DEMO_MODE === 'true') {
+      seedSampleWorkspace();
+      workspaces = db.getWorkspaces(userId);
+    } else {
+      const defaultWs = db.saveWorkspace({
+        id: `ws-${uuidv4().slice(0, 8)}`,
+        name: 'AEVORA Workspace',
+        productName: 'Production Product',
+        productDescription: 'Repository and feature intelligence tracking.',
+        teamDetails: 'Core Engineering',
+        ownerId: userId || 'user-default',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isSample: false,
+      });
+      workspaces = [defaultWs];
+    }
   }
   return res.json(workspaces);
 });
@@ -230,7 +251,7 @@ router.delete('/workspaces/:id/data', (req: Request, res: Response) => {
 // ==========================================
 
 router.post('/demo/dispatch-live-event', async (req: Request, res: Response) => {
-  const workspaceId = (req.body.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.body.workspaceId as string);
   const eventCategory = req.body.eventCategory || 'PULL_REQUEST';
   const now = new Date();
   const dateStr = now.toISOString().split('T')[0];
@@ -467,7 +488,7 @@ Module: Infrastructure`;
 // ==========================================
 
 router.get('/records', (req: Request, res: Response) => {
-  const workspaceId = (req.query.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.query.workspaceId as string);
   const records = db.getRecords(workspaceId);
   return res.json(records);
 });
@@ -480,7 +501,7 @@ router.get('/records/:id', (req: Request, res: Response) => {
 });
 
 router.delete('/records/:id', (req: Request, res: Response) => {
-  const workspaceId = (req.query.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.query.workspaceId as string);
   const deleted = db.deleteRecord(req.params.id as string, workspaceId);
   if (!deleted) return res.status(404).json({ error: 'Record not found' });
   return res.json({ success: true });
@@ -489,7 +510,7 @@ router.delete('/records/:id', (req: Request, res: Response) => {
 router.post('/records/upload', upload.array('files', 10), async (req: Request, res: Response) => {
   try {
     const files = req.files as Express.Multer.File[];
-    const workspaceId = (req.body.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+    const workspaceId = getEffectiveWorkspaceId(req.body.workspaceId as string);
     const author = (req.body.author as string) || 'Manual Upload';
     const explicitEventDate = req.body.eventDate as string | undefined;
 
@@ -682,7 +703,7 @@ router.post('/records/:id/re-extract', async (req: Request, res: Response) => {
 // ==========================================
 
 router.get('/features', (req: Request, res: Response) => {
-  const workspaceId = (req.query.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.query.workspaceId as string);
   const features = db.getFeatures(workspaceId);
   return res.json(features);
 });
@@ -802,7 +823,7 @@ router.put('/features/:id', (req: Request, res: Response) => {
 // ==========================================
 
 router.get('/timeline', (req: Request, res: Response) => {
-  const workspaceId = (req.query.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.query.workspaceId as string);
   const featureId = req.query.featureId as string | undefined;
   const eventType = req.query.eventType as string | undefined;
   const startDate = req.query.startDate as string | undefined;
@@ -826,7 +847,7 @@ router.get('/timeline', (req: Request, res: Response) => {
 
 // Compare feature states across two dates
 router.get('/timeline/compare', (req: Request, res: Response) => {
-  const workspaceId = (req.query.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.query.workspaceId as string);
   const featureId = req.query.featureId as string;
   const date1 = req.query.date1 as string;
   const date2 = req.query.date2 as string;
@@ -877,7 +898,7 @@ router.get('/timeline/compare', (req: Request, res: Response) => {
 // ==========================================
 
 router.get('/graph', (req: Request, res: Response) => {
-  const workspaceId = (req.query.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.query.workspaceId as string);
   const features = db.getFeatures(workspaceId);
   const records = db.getRecords(workspaceId);
   const decisions = db.getDecisions(workspaceId);
@@ -1064,7 +1085,8 @@ router.post('/chat', async (req: Request, res: Response) => {
     return res.status(429).json({ error: 'Rate limit exceeded. Maximum 20 messages per minute.' });
   }
 
-  const { message, question, prompt } = req.body;
+  const { message, question, prompt, live_only, liveOnly } = req.body;
+  const isLiveOnly = Boolean(live_only || liveOnly);
   const rawMsg = (message || question || prompt || '') as string;
   const trimmed = typeof rawMsg === 'string' ? rawMsg.trim() : '';
 
@@ -1080,7 +1102,7 @@ router.post('/chat', async (req: Request, res: Response) => {
   const apiKey = db.getSettings().geminiApiKey || process.env.GEMINI_API_KEY || undefined;
 
   try {
-    const chatResult = await eventsDbService.handleChat(trimmed, clientIp, apiKey);
+    const chatResult = await eventsDbService.handleChat(trimmed, clientIp, apiKey, isLiveOnly);
     return res.json(chatResult);
   } catch (err: any) {
     console.error('[Chat Assistant Error]', err);
@@ -1095,7 +1117,8 @@ router.post('/ai/ask', async (req: Request, res: Response) => {
     return res.status(429).json({ error: 'Rate limit exceeded. Maximum 20 messages per minute.' });
   }
 
-  const { question, message } = req.body;
+  const { question, message, live_only, liveOnly } = req.body;
+  const isLiveOnly = Boolean(live_only || liveOnly);
   const rawMsg = (question || message || '') as string;
   if (!rawMsg || typeof rawMsg !== 'string') {
     return res.status(400).json({ error: 'A valid question string is required' });
@@ -1113,7 +1136,7 @@ router.post('/ai/ask', async (req: Request, res: Response) => {
   const apiKey = db.getSettings().geminiApiKey || process.env.GEMINI_API_KEY || undefined;
 
   try {
-    const chatResult = await eventsDbService.handleChat(trimmedQuestion, clientIp, apiKey);
+    const chatResult = await eventsDbService.handleChat(trimmedQuestion, clientIp, apiKey, isLiveOnly);
     return res.json(chatResult);
   } catch (err: any) {
     console.error('[AI Assistant Error]', err);
@@ -1126,14 +1149,14 @@ router.post('/ai/ask', async (req: Request, res: Response) => {
 // ==========================================
 
 router.get('/conflicts', (req: Request, res: Response) => {
-  const workspaceId = (req.query.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.query.workspaceId as string);
   const conflicts = db.getConflicts(workspaceId);
   return res.json(conflicts);
 });
 
 router.post('/conflicts/:id/review', (req: Request, res: Response) => {
   const { id } = req.params;
-  const workspaceId = (req.body.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.body.workspaceId as string);
   const conflicts = db.getConflicts(workspaceId);
   const conflict = conflicts.find((c) => c.id === id);
 
@@ -1146,7 +1169,7 @@ router.post('/conflicts/:id/review', (req: Request, res: Response) => {
 router.post('/conflicts/:id/resolve', (req: Request, res: Response) => {
   const { id } = req.params;
   const { resolutionNote, resolvedBy } = req.body;
-  const workspaceId = (req.body.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.body.workspaceId as string);
 
   const conflicts = db.getConflicts(workspaceId);
   const conflict = conflicts.find((c) => c.id === id);
@@ -1174,7 +1197,7 @@ router.post('/conflicts/:id/resolve', (req: Request, res: Response) => {
 });
 
 router.get('/decisions', (req: Request, res: Response) => {
-  const workspaceId = (req.query.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.query.workspaceId as string);
   const decisions = db.getDecisions(workspaceId);
   return res.json(decisions);
 });
@@ -1184,7 +1207,7 @@ router.get('/decisions', (req: Request, res: Response) => {
 // ==========================================
 
 router.get('/activity', (req: Request, res: Response) => {
-  const workspaceId = (req.query.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.query.workspaceId as string);
   const source = req.query.source as string | undefined;
   const featureId = req.query.featureId as string | undefined;
 
@@ -1204,7 +1227,7 @@ router.get('/activity', (req: Request, res: Response) => {
 // ==========================================
 
 router.get('/integrations', (req: Request, res: Response) => {
-  const workspaceId = (req.query.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.query.workspaceId as string);
   let integrations = db.getIntegrations(workspaceId);
   if (integrations.length === 0) {
     seedSampleWorkspace();
@@ -1250,7 +1273,7 @@ router.post('/integrations/test-connection', async (req: Request, res: Response)
 router.post('/integrations/:provider', (req: Request, res: Response) => {
   const provider = (req.params.provider as string).toUpperCase() as any;
   const { workspaceId, isConnected, config } = req.body;
-  const wsId = workspaceId || SAMPLE_WORKSPACE_ID;
+  const wsId = getEffectiveWorkspaceId(workspaceId);
 
   const integrations = db.getIntegrations(wsId);
   let int = integrations.find((i) => i.provider === provider);
@@ -1283,7 +1306,7 @@ router.post('/webhooks/github', async (req: Request, res: Response) => {
   const eventHeader = (req.headers['x-github-event'] as string) || 'push';
   const deliveryId = (req.headers['x-github-delivery'] as string) || `delivery-${Date.now()}`;
   const signature = req.headers['x-hub-signature-256'] as string | undefined;
-  const workspaceId = (req.query.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.query.workspaceId as string);
 
   const rawBody = JSON.stringify(req.body);
   const isValid = webhookService.verifyGitHubSignature(rawBody, signature);
@@ -1311,7 +1334,7 @@ router.get('/notifications', (req: Request, res: Response) => {
   if (notifs && notifs.length > 0) {
     return res.json(notifs);
   }
-  const workspaceId = (req.query.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.query.workspaceId as string);
   const legacyNotifs = db.getNotifications(workspaceId);
   return res.json(legacyNotifs);
 });
@@ -1319,23 +1342,31 @@ router.get('/notifications', (req: Request, res: Response) => {
 router.post('/notifications/:id/read', (req: Request, res: Response) => {
   const id = req.params.id as string;
   const readAt = eventsDbService.markNotificationRead(id);
-  const workspaceId = (req.body.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.body.workspaceId as string);
   db.markNotificationAsRead(id, workspaceId);
   return res.json({ status: 'ok', id, read_at: readAt });
 });
 
 router.post('/notifications/read-all', (req: Request, res: Response) => {
   const readAt = eventsDbService.markAllNotificationsRead();
-  const workspaceId = (req.body.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.body.workspaceId as string);
   db.markAllNotificationsAsRead(workspaceId);
   return res.json({ status: 'ok', read_at: readAt });
 });
 
 router.post('/notifications/mark-all-read', (req: Request, res: Response) => {
   const readAt = eventsDbService.markAllNotificationsRead();
-  const workspaceId = (req.body.workspaceId as string) || SAMPLE_WORKSPACE_ID;
+  const workspaceId = getEffectiveWorkspaceId(req.body.workspaceId as string);
   db.markAllNotificationsAsRead(workspaceId);
   return res.json({ status: 'ok', success: true, read_at: readAt });
+});
+
+router.post('/notifications/broadcast', (req: Request, res: Response) => {
+  const notif = req.body;
+  if (notif && notif.id) {
+    eventsDbService.broadcastNotification(notif);
+  }
+  return res.json({ status: 'ok' });
 });
 
 router.post('/events/:source_id/reason', (req: Request, res: Response) => {

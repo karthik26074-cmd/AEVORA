@@ -12,63 +12,7 @@ interface HistoryItem {
   sourceType: string;
 }
 
-// Built-in reference items authentic to the Smart Banking Platform
-const DEFAULT_HISTORY_ITEMS: HistoryItem[] = [
-  {
-    id: 'hist-sb-1',
-    date: 'Oct 24',
-    action: 'Introduced',
-    status: 'implemented',
-    quote: 'Passkey WebAuthn biometric authentication live for all accounts. Mobile session verification enabled.',
-    sourceId: 'pr-142',
-    sourceType: 'GitHub PR',
-  },
-  {
-    id: 'hist-sb-2',
-    date: 'Oct 23',
-    action: 'Removed',
-    status: 'proposed',
-    quote: 'We should retire Legacy SMS 2FA once biometric passkey migration is complete across iOS & Android.',
-    sourceId: 'adr-024',
-    sourceType: 'Architecture ADR',
-  },
-  {
-    id: 'hist-sb-3',
-    date: 'Oct 21',
-    action: 'Renamed',
-    status: 'implemented',
-    quote: 'Renamed StepUpSecurity to AdaptiveMFA; that better reflects dynamic risk scoring engine.',
-    sourceId: 'pr-138',
-    sourceType: 'GitHub PR',
-  },
-  {
-    id: 'hist-sb-4',
-    date: 'Oct 18',
-    action: 'Modified',
-    status: 'implemented',
-    quote: 'OTP expiration reduced from 300s to 60s following security audit directive SEC-2024-05.',
-    sourceId: 'pr-104',
-    sourceType: 'Security Audit',
-  },
-  {
-    id: 'hist-sb-5',
-    date: 'Oct 17',
-    action: 'Modified',
-    status: 'rejected',
-    quote: 'Architecture committee rejected custom checkout tokenization; hosted Stripe & Adyen gateways are safer to maintain.',
-    sourceId: 'meeting-019',
-    sourceType: 'Meeting Notes',
-  },
-  {
-    id: 'hist-sb-6',
-    date: 'Oct 14',
-    action: 'Introduced',
-    status: 'approved',
-    quote: 'Payment Gateway dual-vendor fallback approved for Stripe and Adyen redundancy.',
-    sourceId: 'adr-018',
-    sourceType: 'Architecture ADR',
-  },
-];
+
 
 interface RecentProjectHistoryProps {
   events?: FeatureEvent[];
@@ -186,7 +130,7 @@ export const RecentProjectHistory: React.FC<RecentProjectHistoryProps> = ({
     });
 
   // Use dynamic items from the active workspace data
-  const itemsToDisplay = dynamicItems.length > 0 ? dynamicItems : DEFAULT_HISTORY_ITEMS;
+  const itemsToDisplay = dynamicItems;
 
   const getStatusBadgeStyle = (status: HistoryItem['status']) => {
     switch (status) {
@@ -227,7 +171,12 @@ export const RecentProjectHistory: React.FC<RecentProjectHistoryProps> = ({
 
       {/* Timeline items list */}
       <div className="mt-2">
-        {itemsToDisplay.map((item, index) => {
+        {itemsToDisplay.length === 0 ? (
+          <div className="py-8 text-center text-xs text-brand-secondary">
+            No project history events recorded yet. Connect a GitHub repository or add a document to track feature evolution.
+          </div>
+        ) : (
+          itemsToDisplay.map((item, index) => {
           const isLast = index === itemsToDisplay.length - 1;
 
           return (
@@ -281,7 +230,7 @@ export const RecentProjectHistory: React.FC<RecentProjectHistoryProps> = ({
               </div>
             </div>
           );
-        })}
+        }))}
       </div>
     </div>
   );

@@ -116,7 +116,7 @@ export const LiveStreamController: React.FC = () => {
   // Clear workspace data (Start clean slate for judges)
   const handleClearData = async () => {
     if (!currentWorkspace) return;
-    if (!window.confirm('Clear all pre-existing records to start a 100% clean real-time session? You can restore sample data anytime.')) {
+    if (!window.confirm('Clear all recorded events and features in this workspace to start a 100% clean session?')) {
       return;
     }
 
@@ -238,15 +238,7 @@ export const LiveStreamController: React.FC = () => {
             <span>Clear Old Records</span>
           </button>
 
-          <button
-            onClick={handleRestoreSample}
-            disabled={isDispatching}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-brand-border dark:border-brand-dark-border text-brand-secondary hover:text-brand-dark dark:hover:text-white hover:bg-brand-bg text-xs font-semibold transition-all disabled:opacity-50"
-            title="Restore default sample records"
-          >
-            <RotateCcw size={13} />
-            <span>Restore Samples</span>
-          </button>
+
         </div>
       </div>
 

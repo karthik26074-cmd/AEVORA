@@ -225,6 +225,21 @@ class Database {
     return event;
   }
 
+  public saveFeatureEvents(events: FeatureEvent[]): FeatureEvent[] {
+    if (!events.length) return [];
+    for (const event of events) {
+      const idx = this.data.featureEvents.findIndex((e) => e.id === event.id);
+      if (idx >= 0) {
+        this.data.featureEvents[idx] = event;
+      } else {
+        this.data.featureEvents.push(event);
+      }
+    }
+    this.save();
+    events.forEach((e) => this.broadcast('EVENT_CREATED', e));
+    return events;
+  }
+
   // --- Decisions ---
   public getDecisions(workspaceId: string): Decision[] {
     return this.data.decisions.filter((d) => d.workspaceId === workspaceId);

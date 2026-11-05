@@ -13,6 +13,7 @@ import {
   LogOut,
   User as UserIcon,
   Sparkles,
+  Menu,
 } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useAuth } from '../context/AuthContext';
@@ -22,6 +23,7 @@ interface TopbarProps {
   onOpenCreateWorkspace: () => void;
   onSelectFeature: (featureId: string) => void;
   setCurrentTab: (tab: string) => void;
+  onToggleMobileMenu?: () => void;
 }
 
 export const Topbar: React.FC<TopbarProps> = ({
@@ -29,6 +31,7 @@ export const Topbar: React.FC<TopbarProps> = ({
   onOpenCreateWorkspace,
   onSelectFeature,
   setCurrentTab,
+  onToggleMobileMenu,
 }) => {
   const {
     workspaces,
@@ -100,14 +103,23 @@ export const Topbar: React.FC<TopbarProps> = ({
 
   return (
     <header
-      className={`fixed top-0 right-0 z-20 h-16 bg-brand-surface/90 dark:bg-brand-dark/90 backdrop-blur-md border-b border-brand-border dark:border-brand-dark-border px-4 md:px-6 flex items-center justify-between transition-all duration-300 ${collapsed ? 'left-20' : 'left-64'
-        }`}
+      className={`fixed top-0 right-0 z-20 h-16 bg-brand-surface/90 dark:bg-brand-dark/90 backdrop-blur-md border-b border-brand-border dark:border-brand-dark-border px-3 sm:px-4 md:px-6 flex items-center justify-between transition-all duration-300 left-0 ${
+        collapsed ? 'md:left-20' : 'md:left-64'
+      }`}
     >
-      {/* Left: Workspace Selector */}
-      <div className="relative flex items-center gap-3" ref={wsRef}>
+      {/* Left: Mobile Menu & Workspace Selector */}
+      <div className="relative flex items-center gap-2 sm:gap-3" ref={wsRef}>
+        <button
+          onClick={onToggleMobileMenu}
+          className="md:hidden p-2 -ml-1 text-brand-secondary hover:text-brand-dark dark:hover:text-white rounded-xl hover:bg-brand-bg dark:hover:bg-brand-dark-card transition-colors flex items-center justify-center"
+          title="Open Menu"
+        >
+          <Menu size={20} />
+        </button>
+
         <button
           onClick={() => setWsDropdownOpen(!wsDropdownOpen)}
-          className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-brand-border dark:border-brand-dark-border bg-brand-bg/50 dark:bg-brand-dark-card/50 hover:bg-brand-bg dark:hover:bg-brand-dark-card transition-colors text-left"
+          className="flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1.5 rounded-xl border border-brand-border dark:border-brand-dark-border bg-brand-bg/50 dark:bg-brand-dark-card/50 hover:bg-brand-bg dark:hover:bg-brand-dark-card transition-colors text-left"
         >
           <div className="w-2.5 h-2.5 rounded-full bg-brand-primary" />
           <div className="flex flex-col">

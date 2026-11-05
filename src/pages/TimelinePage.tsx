@@ -36,9 +36,34 @@ export const TimelinePage: React.FC = () => {
 
   // Selected Evidence Modal
   const [selectedEvidenceEvent, setSelectedEvidenceEvent] = useState<FeatureEvent | null>(null);
+  const [liveGitHubOnly, setLiveGitHubOnly] = useState<boolean>(false);
+
+  const SEED_SOURCE_IDS = [
+    'gh-pr-104-otp-verified',
+    'sec-audit-otp-mod',
+    'prd-auth-v1-otp',
+    'gh-pr-112-rename-checkout',
+    'jira-bank-201-payment-approved',
+    'gh-commit-gateway-router',
+    'gh-commit-reconciliation-worker',
+    'jira-bank-205-passkey-proposed',
+  ];
+
+  const isDemoRecord = (e: any): boolean => {
+    if (!e) return false;
+    if (e.isSample) return true;
+    if (e.sourceRecordId && (e.sourceRecordId.startsWith('sample-') || e.sourceRecordId.includes('seed'))) return true;
+    if (e.source_id && SEED_SOURCE_IDS.includes(e.source_id)) return true;
+    if (e.id && SEED_SOURCE_IDS.includes(e.id)) return true;
+    if (e.details && typeof e.details === 'string' && e.details.includes('"seed":true')) return true;
+    return false;
+  };
 
   // Filter events
   const filteredEvents = events.filter((e) => {
+    if (liveGitHubOnly && isDemoRecord(e)) {
+      return false;
+    }
     const matchesFeature =
       selectedFeatureFilter === 'ALL' || e.featureId === selectedFeatureFilter;
     const matchesType = selectedTypeFilter === 'ALL' || e.eventType === selectedTypeFilter;
@@ -264,8 +289,21 @@ export const TimelinePage: React.FC = () => {
         </div>
 
         {/* Date Range Inputs */}
-        <div className="flex items-center gap-2 text-xs w-full sm:w-auto justify-end">
-          <Calendar size={14} className="text-brand-secondary" />
+        <div className="flex items-center gap-2 text-xs w-full sm:w-auto justify-end flex-wrap">
+          <button
+            type="button"
+            onClick={() => setLiveGitHubOnly(!liveGitHubOnly)}
+            className={`px-3 py-1 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 ${
+              liveGitHubOnly
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                : 'bg-brand-surface dark:bg-brand-dark-card text-brand-secondary border-brand-border dark:border-brand-dark-border hover:text-brand-dark dark:hover:text-white'
+            }`}
+            title="Toggle between all records and live GitHub events only"
+          >
+            <span className={`w-2 h-2 rounded-full ${liveGitHubOnly ? 'bg-emerald-500' : 'bg-brand-secondary/40'}`} />
+            <span>Live GitHub only</span>
+          </button>
+          <Calendar size={14} className="text-brand-secondary ml-1" />
           <input
             type="date"
             value={startDate}
@@ -328,6 +366,11 @@ export const TimelinePage: React.FC = () => {
                       {evt.status === 'UNDER_REVIEW' && (
                         <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-brand-warning-light text-brand-warning">
                           Under Review
+                        </span>
+                      )}
+                      {isDemoRecord(evt) && (
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25">
+                          Demo data
                         </span>
                       )}
                     </div>

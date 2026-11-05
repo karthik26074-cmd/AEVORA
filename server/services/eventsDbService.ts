@@ -69,15 +69,74 @@ export const NAVIGATION_REGISTRY: Record<string, { tab: string; label: string }>
   'settings': { tab: 'settings', label: 'Settings' },
 };
 
+export const SEED_SOURCE_IDS = [
+  'gh-pr-104-otp-verified',
+  'sec-audit-otp-mod',
+  'prd-auth-v1-otp',
+  'gh-pr-112-rename-checkout',
+  'jira-bank-201-payment-approved',
+  'gh-commit-gateway-router',
+  'gh-commit-reconciliation-worker',
+  'jira-bank-205-passkey-proposed',
+];
+
 class EventsDbService extends EventEmitter {
   private db: DatabaseSync;
   private rateLimits: Map<string, number[]> = new Map();
+  private seenNotificationIds: Set<string> = new Set();
 
   constructor() {
     super();
     this.db = new DatabaseSync(DB_PATH);
     this.initDb();
     this.seedIfEmpty();
+
+    // Correct any legacy records where status was accidentally stored as 'modified'
+    try {
+      this.db.exec("UPDATE events SET status = 'implemented' WHERE status = 'modified'");
+    } catch {
+      // ignore
+    }
+
+    // Populate already known notifications so we don't re-emit old ones
+    try {
+      const existing = this.db.prepare('SELECT id FROM notifications').all() as any[];
+      existing.forEach((row) => this.seenNotificationIds.add(row.id));
+    } catch {
+      // ignore
+    }
+
+    // Background poller every 1s: detects any notification written by Python on port 8000 and emits it over SSE
+    setInterval(() => this.pollForNewNotifications(), 1000);
+  }
+
+  public broadcastNotification(notif: any): void {
+    if (notif?.id) {
+      this.seenNotificationIds.add(notif.id);
+    }
+    this.emit('notification', notif);
+  }
+
+  public pollForNewNotifications(): void {
+    try {
+      const rows = this.db.prepare('SELECT * FROM notifications ORDER BY created_at DESC LIMIT 20').all() as any[];
+      for (const r of rows) {
+        if (!this.seenNotificationIds.has(r.id)) {
+          this.seenNotificationIds.add(r.id);
+          const notif = this.rowToNotification(r);
+          this.emit('notification', notif);
+        }
+      }
+    } catch {
+      // ignore transient db read error
+    }
+  }
+
+  public rowToNotification(r: any): any {
+    return {
+      ...r,
+      event_ids: r.event_ids ? (typeof r.event_ids === 'string' ? JSON.parse(r.event_ids) : r.event_ids) : [],
+    };
   }
 
   private initDb() {
@@ -123,12 +182,45 @@ class EventsDbService extends EventEmitter {
         delivery_id TEXT
       )
     `);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS user_github_tokens (
+        user_id TEXT PRIMARY KEY,
+        workspace_id TEXT,
+        encrypted_token TEXT NOT NULL,
+        iv TEXT NOT NULL,
+        auth_tag TEXT NOT NULL,
+        scopes TEXT,
+        github_username TEXT,
+        avatar_url TEXT,
+        updated_at TEXT NOT NULL
+      )
+    `);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS repositories (
+        id TEXT PRIMARY KEY,
+        github_id INTEGER,
+        full_name TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
+        webhook_id INTEGER,
+        status TEXT NOT NULL DEFAULT 'active',
+        connected_at TEXT NOT NULL,
+        last_sync_at TEXT,
+        event_count INTEGER DEFAULT 0
+      )
+    `);
     const cols = (this.db.prepare("PRAGMA table_info(events)").all() as any[]).map((c) => c.name);
     if (!cols.includes('related_source_id')) {
       this.db.exec('ALTER TABLE events ADD COLUMN related_source_id TEXT');
     }
     if (!cols.includes('details')) {
       this.db.exec('ALTER TABLE events ADD COLUMN details TEXT');
+    }
+    if (!cols.includes('workspace_id')) {
+      this.db.exec('ALTER TABLE events ADD COLUMN workspace_id TEXT');
+    }
+    const notifCols = (this.db.prepare("PRAGMA table_info(notifications)").all() as any[]).map((c) => c.name);
+    if (!notifCols.includes('workspace_id')) {
+      this.db.exec('ALTER TABLE notifications ADD COLUMN workspace_id TEXT');
     }
   }
 
@@ -169,7 +261,14 @@ class EventsDbService extends EventEmitter {
     const noteSourceId = `note-${uuidv4()}`;
     const tgtType = (targetEvent.event_type || '').toLowerCase();
     const eventType = tgtType.includes('decis') ? 'decided' : 'modified';
-    const status = /\bapproved\b/i.test(reason) ? 'approved' : targetEvent.status;
+    
+    // Status must strictly copy the status of the related event (never "modified")
+    let status = targetEvent.status ? targetEvent.status.toLowerCase() : 'implemented';
+    if (/\bapproved\b/i.test(reason)) {
+      status = 'approved';
+    } else if (status === 'modified' || !status) {
+      status = 'implemented';
+    }
 
     const detailsJson = JSON.stringify({
       origin: 'user_reason',
@@ -254,17 +353,19 @@ class EventsDbService extends EventEmitter {
           quote: 'Implemented two-factor OTP verification with 120s TTL and Redis store.',
           evidence_url: 'https://github.com/smartbank-io/banking-core-api/pull/104',
           source_id: 'gh-pr-104-otp-verified',
+          details: JSON.stringify({ seed: true, is_demo: true }),
         },
         {
           entity_name: 'OTP Verification',
           event_type: 'security_audit',
-          status: 'modified',
+          status: 'implemented',
           event_date: '2024-05-22',
           ingested_at: '2024-05-22T14:30:00Z',
           actors: ['Rachel Wei'],
           quote: 'Security audit requirement: reduce OTP validity window from 300s to 120 seconds per PCI-DSS mandate.',
           evidence_url: 'https://smartbank.atlassian.net/browse/SEC-409',
           source_id: 'sec-audit-otp-mod',
+          details: JSON.stringify({ seed: true, is_demo: true }),
         },
         {
           entity_name: 'OTP Verification',
@@ -276,11 +377,12 @@ class EventsDbService extends EventEmitter {
           quote: 'Mandate two-factor authentication for retail payment flows exceeding $100.',
           evidence_url: 'https://docs.google.com/document/d/auth-spec-v1',
           source_id: 'prd-auth-v1-otp',
+          details: JSON.stringify({ seed: true, is_demo: true }),
         },
         {
           entity_name: 'Quick Checkout',
           event_type: 'renamed',
-          status: 'modified',
+          status: 'implemented',
           event_date: '2024-05-20',
           ingested_at: '2024-05-20T10:00:00Z',
           actors: ['Rachel Wei', 'Alex Morgan'],
@@ -289,6 +391,7 @@ class EventsDbService extends EventEmitter {
           source_id: 'gh-pr-112-rename-checkout',
           old_name: 'Guest Checkout',
           new_name: 'Quick Checkout',
+          details: JSON.stringify({ seed: true, is_demo: true }),
         },
         {
           entity_name: 'Payment Gateway',
@@ -300,6 +403,7 @@ class EventsDbService extends EventEmitter {
           quote: 'Architecture council approved dual-vendor Stripe/Adyen fallback to satisfy 99.99% uptime SLA.',
           evidence_url: 'https://smartbank.atlassian.net/browse/BANK-201',
           source_id: 'jira-bank-201-payment-approved',
+          details: JSON.stringify({ seed: true, is_demo: true }),
         },
         {
           entity_name: 'Payment Gateway',
@@ -311,6 +415,7 @@ class EventsDbService extends EventEmitter {
           quote: 'Added multi-acquirer intelligent routing engine in gatewayRouter.ts.',
           evidence_url: 'https://github.com/smartbank-io/banking-core-api/commit/7f1a9c8e',
           source_id: 'gh-commit-gateway-router',
+          details: JSON.stringify({ seed: true, is_demo: true }),
         },
         {
           entity_name: 'Transaction History & Reconciliation',
@@ -322,6 +427,7 @@ class EventsDbService extends EventEmitter {
           quote: 'Implemented daily automated ledger reconciliation worker with idempotency checks.',
           evidence_url: 'https://github.com/smartbank-io/banking-core-api/commit/3d91f28b',
           source_id: 'gh-commit-reconciliation-worker',
+          details: JSON.stringify({ seed: true, is_demo: true }),
         },
         {
           entity_name: 'Passkey WebAuthn Biometrics',
@@ -333,6 +439,7 @@ class EventsDbService extends EventEmitter {
           quote: 'Proposed FIDO2 WebAuthn biometric login for mobile and web applications to replace passwords.',
           evidence_url: 'https://smartbank.atlassian.net/browse/BANK-205',
           source_id: 'jira-bank-205-passkey-proposed',
+          details: JSON.stringify({ seed: true, is_demo: true }),
         },
       ];
 
@@ -437,9 +544,14 @@ class EventsDbService extends EventEmitter {
     return rows.map((r) => this.rowToEvent(r));
   }
 
-  public searchEvents(query: string, dateFilter?: string): StoredEvent[] {
+  public searchEvents(query: string, dateFilter?: string, liveOnly: boolean = false): StoredEvent[] {
     const q = query.toLowerCase().trim();
-    const allEvents = this.getAllEvents();
+    let allEvents = this.getAllEvents();
+    if (liveOnly) {
+      allEvents = allEvents.filter(
+        (e) => !SEED_SOURCE_IDS.includes(e.source_id) && !(e.details && e.details.includes('"seed":true'))
+      );
+    }
     if (!allEvents.length) return [];
 
     // 1. Resolve renames across old_name and new_name
@@ -575,7 +687,7 @@ class EventsDbService extends EventEmitter {
     return rows.map((r) => this.rowToEvent(r));
   }
 
-  public getProductOverviewData(): {
+  public getProductOverviewData(liveOnly: boolean = false): {
     empty: boolean;
     total_events: number;
     features_tracked: number;
@@ -584,7 +696,10 @@ class EventsDbService extends EventEmitter {
     max_date: string;
     recent_events: StoredEvent[];
   } {
-    const countRow = this.db.prepare('SELECT count(*) as cnt FROM events').get() as { cnt: number };
+    const seedCond = liveOnly
+      ? ` WHERE source_id NOT IN ('${SEED_SOURCE_IDS.join("','")}') AND (details IS NULL OR details NOT LIKE '%"seed":true%')`
+      : '';
+    const countRow = this.db.prepare(`SELECT count(*) as cnt FROM events${seedCond}`).get() as { cnt: number };
     const total_events = countRow ? countRow.cnt : 0;
     if (total_events === 0) {
       return {
@@ -598,10 +713,16 @@ class EventsDbService extends EventEmitter {
       };
     }
 
-    const featRow = this.db.prepare("SELECT count(DISTINCT entity_name) as cnt FROM events WHERE entity_name IS NOT NULL AND entity_name != ''").get() as { cnt: number };
+    const featWhere = liveOnly
+      ? ` WHERE entity_name IS NOT NULL AND entity_name != '' AND source_id NOT IN ('${SEED_SOURCE_IDS.join("','")}') AND (details IS NULL OR details NOT LIKE '%"seed":true%')`
+      : " WHERE entity_name IS NOT NULL AND entity_name != ''";
+    const featRow = this.db.prepare(`SELECT count(DISTINCT entity_name) as cnt FROM events${featWhere}`).get() as { cnt: number };
     const features_tracked = featRow ? featRow.cnt : 0;
 
-    const statusRows = this.db.prepare('SELECT status, count(*) as cnt FROM events GROUP BY status').all() as Array<{ status: string; cnt: number }>;
+    const statusWhere = liveOnly
+      ? ` WHERE source_id NOT IN ('${SEED_SOURCE_IDS.join("','")}') AND (details IS NULL OR details NOT LIKE '%"seed":true%')`
+      : '';
+    const statusRows = this.db.prepare(`SELECT status, count(*) as cnt FROM events${statusWhere} GROUP BY status`).all() as Array<{ status: string; cnt: number }>;
     const status_breakdown: Record<string, number> = {
       proposed: 0,
       approved: 0,
@@ -614,7 +735,7 @@ class EventsDbService extends EventEmitter {
     for (const r of statusRows) {
       const st = (r.status || '').toLowerCase();
       let matched = false;
-      for (const targetSt of ['proposed', 'approved', 'implemented', 'rejected', 'removed', 'renamed', 'modified']) {
+      for (const targetSt of ['proposed', 'approved', 'implemented', 'rejected', 'removed', 'renamed']) {
         if (st.includes(targetSt) || (targetSt === 'implemented' && st.includes('merged'))) {
           status_breakdown[targetSt] += r.cnt;
           matched = true;
@@ -622,15 +743,21 @@ class EventsDbService extends EventEmitter {
         }
       }
       if (!matched) {
-        status_breakdown[st] = r.cnt;
+        status_breakdown[st] = (status_breakdown[st] || 0) + r.cnt;
       }
     }
 
-    const dateRow = this.db.prepare("SELECT min(event_date) as min_date, max(event_date) as max_date FROM events WHERE event_date IS NOT NULL AND event_date != ''").get() as { min_date: string; max_date: string };
+    const dateWhere = liveOnly
+      ? ` WHERE event_date IS NOT NULL AND event_date != '' AND source_id NOT IN ('${SEED_SOURCE_IDS.join("','")}') AND (details IS NULL OR details NOT LIKE '%"seed":true%')`
+      : " WHERE event_date IS NOT NULL AND event_date != ''";
+    const dateRow = this.db.prepare(`SELECT min(event_date) as min_date, max(event_date) as max_date FROM events${dateWhere}`).get() as { min_date: string; max_date: string };
     const min_date = dateRow ? dateRow.min_date || 'unknown' : 'unknown';
     const max_date = dateRow ? dateRow.max_date || 'unknown' : 'unknown';
 
-    const recentRows = this.db.prepare('SELECT * FROM events ORDER BY event_date DESC, id DESC LIMIT 3').all() as any[];
+    const recentWhere = liveOnly
+      ? ` WHERE source_id NOT IN ('${SEED_SOURCE_IDS.join("','")}') AND (details IS NULL OR details NOT LIKE '%"seed":true%')`
+      : '';
+    const recentRows = this.db.prepare(`SELECT * FROM events${recentWhere} ORDER BY event_date DESC, id DESC LIMIT 3`).all() as any[];
     const recent_events = recentRows.map((r) => this.rowToEvent(r));
 
     return {
@@ -647,11 +774,14 @@ class EventsDbService extends EventEmitter {
   public async synthesizeProductOverview(
     data: ReturnType<EventsDbService['getProductOverviewData']>,
     query: string = '',
-    apiKey?: string
+    apiKey?: string,
+    liveOnly: boolean = false
   ): Promise<{ reply: string; citations: ChatCitation[] }> {
     if (data.empty) {
       return {
-        reply: 'No project records have been ingested yet. Connect a GitHub repository and new events will appear here.',
+        reply: liveOnly
+          ? 'No live GitHub records have been ingested yet. Connect a GitHub repository and push commits or webhooks to see live feature history.'
+          : 'No project records have been ingested yet. Connect a GitHub repository and new events will appear here.',
         citations: [],
       };
     }
@@ -1117,7 +1247,12 @@ User Message:
     return res.intent;
   }
 
-  public async handleChat(message: string, clientIp: string, apiKey?: string): Promise<ChatResponse> {
+  public async handleChat(
+    message: string,
+    clientIp: string,
+    apiKey?: string,
+    liveOnly: boolean = false
+  ): Promise<ChatResponse> {
     const trimmed = message.trim();
     const exampleQuestions = this.getExampleQuestions();
 
@@ -1163,8 +1298,8 @@ User Message:
 
     // ── Product Overview ───────────────────────────────────────────────────
     if (intent === 'product_overview') {
-      const data = this.getProductOverviewData();
-      const { reply, citations } = await this.synthesizeProductOverview(data, trimmed, apiKey);
+      const data = this.getProductOverviewData(liveOnly);
+      const { reply, citations } = await this.synthesizeProductOverview(data, trimmed, apiKey, liveOnly);
       return {
         intent: 'product_overview',
         reply,
@@ -1463,7 +1598,7 @@ User Message:
     const dateFilter = dateMatch ? dateMatch[1] : undefined;
 
     // Retrieve events strictly from events.db
-    const matchedEvents = this.searchEvents(trimmed, dateFilter);
+    const matchedEvents = this.searchEvents(trimmed, dateFilter, liveOnly);
 
     if (!matchedEvents || matchedEvents.length === 0) {
       return {

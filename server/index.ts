@@ -5,13 +5,18 @@ import path from 'path';
 import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import dotenv from 'dotenv';
+import { performStartupCheck } from './services/firebaseAdmin.js';
 import apiRouter from './routes/api.js';
+import githubRouter from './routes/githubRoutes.js';
 import { db } from './store/db.js';
 import { seedSampleWorkspace, SAMPLE_WORKSPACE_ID } from './services/sampleData.js';
 import { webhookService } from './services/webhookService.js';
 import { v4 as uuidv4 } from 'uuid';
 
 dotenv.config();
+
+// Execute comprehensive environment and Firebase Admin startup check
+performStartupCheck();
 
 // Validate critical environment configuration on server initialization
 const hasEnvGeminiKey = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim());
@@ -69,6 +74,7 @@ if (fs.existsSync(distPath)) {
 
 // Mount API routes
 app.use('/api', apiRouter);
+app.use('/api/github', githubRouter);
 
 // SPA client routing fallback
 app.get('*', (req, res, next) => {
@@ -218,9 +224,6 @@ db.onUpdate((event: string, payload: any) => {
     }
   });
 });
-
-// Seed sample workspace on startup
-seedSampleWorkspace();
 
 server.listen(PORT, () => {
   console.log(`[AEVORA Server] Running on http://localhost:${PORT}`);

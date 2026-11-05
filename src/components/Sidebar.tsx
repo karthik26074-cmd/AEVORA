@@ -20,6 +20,7 @@ import {
   Moon,
   LogOut,
   User as UserIcon,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -31,6 +32,8 @@ interface SidebarProps {
   onOpenDemo: () => void;
   darkMode: boolean;
   setDarkMode: (val: boolean) => void;
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -41,6 +44,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenDemo,
   darkMode,
   setDarkMode,
+  mobileOpen = false,
+  onCloseMobile,
 }) => {
   const { user, logout } = useAuth();
   const navItems = [
@@ -59,53 +64,80 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   return (
-    <aside
-      className={`fixed top-0 left-0 bottom-0 z-30 transition-all duration-300 flex flex-col bg-brand-surface dark:bg-brand-dark border-r border-brand-border dark:border-brand-dark-border ${
-        collapsed ? 'w-20' : 'w-64'
-      }`}
-    >
-      {/* Brand Header */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-brand-border dark:border-brand-dark-border">
+    <>
+      {/* Mobile Drawer Backdrop */}
+      {mobileOpen && (
         <div
-          className="flex items-center gap-3 cursor-pointer overflow-hidden"
-          onClick={() => setCurrentTab('overview')}
-        >
-          <img src="/logo.svg" alt="AEVORA Logo" className="w-9 h-9 rounded-xl flex-shrink-0 shadow-sm" />
-          {!collapsed && (
-            <div className="flex flex-col">
-              <span className="font-extrabold text-lg tracking-wider text-brand-dark dark:text-white leading-none">
-                AEVORA
-              </span>
-              <span className="text-[10px] uppercase font-bold text-brand-secondary tracking-widest mt-1">
-                PRODUCT INTELLIGENCE
-              </span>
-            </div>
-          )}
-        </div>
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-40 md:hidden animate-fade-in"
+          onClick={onCloseMobile}
+        />
+      )}
 
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="p-1.5 rounded-lg text-brand-secondary hover:text-brand-dark dark:hover:text-white hover:bg-brand-bg dark:hover:bg-brand-dark-card transition-colors hidden md:flex items-center justify-center"
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-        </button>
-      </div>
+      <aside
+        className={`fixed top-0 left-0 bottom-0 z-50 md:z-30 transition-all duration-300 flex flex-col bg-brand-surface dark:bg-brand-dark border-r border-brand-border dark:border-brand-dark-border ${
+          mobileOpen ? 'translate-x-0 w-72 shadow-2xl' : '-translate-x-full md:translate-x-0'
+        } ${collapsed ? 'md:w-20' : 'md:w-64'}`}
+      >
+        {/* Brand Header */}
+        <div className="h-16 flex items-center justify-between px-4 border-b border-brand-border dark:border-brand-dark-border">
+          <div
+            className="flex items-center gap-3 cursor-pointer overflow-hidden"
+            onClick={() => {
+              setCurrentTab('overview');
+              onCloseMobile?.();
+            }}
+          >
+            <img src="/logo.svg" alt="AEVORA Logo" className="w-9 h-9 rounded-xl flex-shrink-0 shadow-sm" />
+            {(!collapsed || mobileOpen) && (
+              <div className="flex flex-col">
+                <span className="font-extrabold text-lg tracking-wider text-brand-dark dark:text-white leading-none">
+                  AEVORA
+                </span>
+                <span className="text-[10px] uppercase font-bold text-brand-secondary tracking-widest mt-1">
+                  PRODUCT INTELLIGENCE
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1">
+            {/* Mobile close button */}
+            <button
+              onClick={onCloseMobile}
+              className="p-1.5 rounded-lg text-brand-secondary hover:text-brand-dark dark:hover:text-white hover:bg-brand-bg dark:hover:bg-brand-dark-card transition-colors md:hidden"
+              title="Close menu"
+            >
+              <X size={18} />
+            </button>
+
+            {/* Desktop collapse button */}
+            <button
+              onClick={() => setCollapsed(!collapsed)}
+              className="p-1.5 rounded-lg text-brand-secondary hover:text-brand-dark dark:hover:text-white hover:bg-brand-bg dark:hover:bg-brand-dark-card transition-colors hidden md:flex items-center justify-center"
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
+          </div>
+        </div>
 
       {/* Guided Live Demo Banner */}
       <div className="px-3 pt-3">
         <button
-          onClick={onOpenDemo}
+          onClick={() => {
+            onOpenDemo();
+            onCloseMobile?.();
+          }}
           className={`w-full flex items-center gap-2.5 p-2 rounded-xl text-xs font-semibold bg-brand-primary-light dark:bg-brand-primary/15 text-brand-primary border border-brand-primary/20 hover:bg-brand-primary/25 transition-all ${
-            collapsed ? 'justify-center' : 'justify-between'
+            collapsed && !mobileOpen ? 'justify-center' : 'justify-between'
           }`}
           title="Interactive Guided Demonstration"
         >
           <div className="flex items-center gap-2">
             <PlayCircle size={16} className="text-brand-primary animate-pulse" />
-            {!collapsed && <span>Guided Live Demo</span>}
+            {(!collapsed || mobileOpen) && <span>Guided Live Demo</span>}
           </div>
-          {!collapsed && (
+          {(!collapsed || mobileOpen) && (
             <span className="bg-brand-primary text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
               Live
             </span>
@@ -121,13 +153,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           return (
             <button
               key={item.id}
-              onClick={() => setCurrentTab(item.id)}
+              onClick={() => {
+                setCurrentTab(item.id);
+                onCloseMobile?.();
+              }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
                 isActive
                   ? 'bg-brand-primary text-white shadow-sm'
                   : 'text-brand-text/80 dark:text-gray-300 hover:bg-brand-bg dark:hover:bg-brand-dark-card hover:text-brand-dark dark:hover:text-white'
-              } ${collapsed ? 'justify-center' : 'justify-start'}`}
-              title={collapsed ? item.label : undefined}
+              } ${collapsed && !mobileOpen ? 'justify-center' : 'justify-start'}`}
+              title={collapsed && !mobileOpen ? item.label : undefined}
             >
               <Icon
                 size={18}
@@ -135,7 +170,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   isActive ? 'text-white' : 'text-brand-secondary dark:text-gray-400 group-hover:text-brand-primary'
                 }`}
               />
-              {!collapsed && (
+              {(!collapsed || mobileOpen) && (
                 <div className="flex items-center justify-between flex-1">
                   <span className="truncate">{item.label}</span>
                   {item.badge && (
@@ -162,7 +197,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {user && (
           <div
             className={`flex items-center gap-2.5 px-3 py-2 mb-1 rounded-xl bg-brand-bg/60 dark:bg-brand-dark/60 border border-brand-border/50 dark:border-brand-dark-border/50 ${
-              collapsed ? 'justify-center' : 'justify-start'
+              collapsed && !mobileOpen ? 'justify-center' : 'justify-start'
             }`}
             title={user.displayName || user.email}
           >
@@ -173,7 +208,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {user.displayName ? user.displayName.slice(0, 2).toUpperCase() : 'JA'}
               </div>
             )}
-            {!collapsed && (
+            {(!collapsed || mobileOpen) && (
               <div className="flex-1 min-w-0">
                 <p className="text-[11px] font-semibold text-brand-dark dark:text-white truncate leading-tight">
                   {user.displayName || 'Jain'}
@@ -187,39 +222,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         <button
-          onClick={() => setCurrentTab('diagnostics')}
+          onClick={() => {
+            setCurrentTab('diagnostics');
+            onCloseMobile?.();
+          }}
           className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-brand-secondary dark:text-gray-400 hover:bg-brand-bg dark:hover:bg-brand-dark-card hover:text-brand-dark dark:hover:text-white transition-colors ${
             currentTab === 'diagnostics' ? 'bg-brand-bg dark:bg-brand-dark-card text-brand-primary font-semibold' : ''
-          } ${collapsed ? 'justify-center' : 'justify-start'}`}
+          } ${collapsed && !mobileOpen ? 'justify-center' : 'justify-start'}`}
           title="System Diagnostics"
         >
           <ShieldCheck size={16} className="text-brand-success" />
-          {!collapsed && <span>System Diagnostics</span>}
+          {(!collapsed || mobileOpen) && <span>System Diagnostics</span>}
         </button>
 
         <button
           onClick={() => setDarkMode(!darkMode)}
           className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-brand-secondary dark:text-gray-400 hover:bg-brand-bg dark:hover:bg-brand-dark-card hover:text-brand-dark dark:hover:text-white transition-colors ${
-            collapsed ? 'justify-center' : 'justify-start'
+            collapsed && !mobileOpen ? 'justify-center' : 'justify-start'
           }`}
           title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
         >
           {darkMode ? <Sun size={16} className="text-brand-warning" /> : <Moon size={16} />}
-          {!collapsed && <span>{darkMode ? 'Light Theme' : 'Dark Theme'}</span>}
+          {(!collapsed || mobileOpen) && <span>{darkMode ? 'Light Theme' : 'Dark Theme'}</span>}
         </button>
 
         {/* Sign Out Button */}
         <button
-          onClick={logout}
+          onClick={() => {
+            logout();
+            onCloseMobile?.();
+          }}
           className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-brand-error hover:bg-brand-error/10 dark:hover:bg-brand-error/15 transition-colors ${
-            collapsed ? 'justify-center' : 'justify-start'
+            collapsed && !mobileOpen ? 'justify-center' : 'justify-start'
           }`}
           title="Sign Out"
         >
           <LogOut size={16} />
-          {!collapsed && <span>Sign Out</span>}
+          {(!collapsed || mobileOpen) && <span>Sign Out</span>}
         </button>
       </div>
     </aside>
+  </>
   );
 };

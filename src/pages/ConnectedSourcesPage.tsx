@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Link2,
   RefreshCw,
@@ -16,8 +16,18 @@ import {
   CheckSquare,
   AlertCircle,
   FileCode,
+  Lock,
+  Unlock,
+  Check,
+  Trash2,
+  Shield,
+  Eye,
+  Activity,
 } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { useAuth } from '../context/AuthContext';
+import { auth } from '../services/firebase';
+import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 interface ConnectedSourcesPageProps {
   onNavigateToTab?: (tab: string, params?: any) => void;
@@ -50,142 +60,328 @@ interface FeatureSourceTrace {
   };
 }
 
-const TRACEABILITY_MATRIX: FeatureSourceTrace[] = [
-  {
-    featureId: 'feat-otp-verification',
-    featureName: 'OTP Verification',
-    category: 'Authentication & Security',
-    status: 'MODIFIED',
-    description: 'Time-based one-time password verification with strict 120s TTL expiration window.',
-    github: {
-      filePath: 'src/auth/otpService.ts',
-      commitSha: '8f7a1c9',
-      url: 'https://github.com/smartbank-io/banking-core-api/blob/main/src/auth/otpService.ts',
-    },
-    jira: {
-      issueKey: 'BANK-104',
-      summary: 'OTP Verification & Expiration Service',
-      status: 'In Production',
-      assignee: 'Devin K',
-      url: 'https://smartbank.atlassian.net/browse/BANK-104',
-    },
-    gdrive: {
-      documentName: 'ADR-004-otp-expiration.md',
-      section: '§ 3.2 Mandatory 120s Expiration Directive',
-      author: 'Rachel Wei (CISO)',
-      url: 'https://drive.google.com/file/d/sample-adr-004',
-    },
-  },
-  {
-    featureId: 'feat-payment-gateway',
-    featureName: 'Payment Gateway',
-    category: 'Core Transactions',
-    status: 'APPROVED',
-    description: 'Multi-rail payment orchestration engine handling SEPA, ACH, and dual-vendor failover.',
-    github: {
-      filePath: 'src/payments/gatewayRouter.ts',
-      commitSha: '4b82d1e',
-      url: 'https://github.com/smartbank-io/banking-core-api/blob/main/src/payments/gatewayRouter.ts',
-    },
-    jira: {
-      issueKey: 'BANK-101',
-      summary: 'Payment Gateway Router & Fallback',
-      status: 'Closed',
-      assignee: 'Vikram Patel',
-      url: 'https://smartbank.atlassian.net/browse/BANK-101',
-    },
-    gdrive: {
-      documentName: 'PRD-2024-Payments-Engine.md',
-      section: '§ 2.1 Multi-rail Dual Fallback (Stripe + Adyen)',
-      author: 'Vikram Patel (Lead PM)',
-      url: 'https://drive.google.com/file/d/sample-prd-payments',
-    },
-  },
-  {
-    featureId: 'feat-transaction-history',
-    featureName: 'Transaction History & Reconciliation',
-    category: 'Ledger & Analytics',
-    status: 'IMPLEMENTED',
-    description: 'High-throughput automated ledger reconciliation worker and indexed customer statements.',
-    github: {
-      filePath: 'src/ledger/reconciliationWorker.ts',
-      commitSha: '3d91f28',
-      url: 'https://github.com/smartbank-io/banking-core-api/blob/main/src/ledger/reconciliationWorker.ts',
-    },
-    jira: {
-      issueKey: 'BANK-108',
-      summary: 'Automated Ledger Reconciliation Worker',
-      status: 'In Production',
-      assignee: 'Marcus Vance',
-      url: 'https://smartbank.atlassian.net/browse/BANK-108',
-    },
-    gdrive: {
-      documentName: 'PRD-Ledger-Reconciliation-v2.md',
-      section: '§ 4.0 Daily Inter-bank Settlement Protocol',
-      author: 'Marcus Vance (Principal Architect)',
-      url: 'https://drive.google.com/file/d/sample-prd-reconciliation',
-    },
-  },
-  {
-    featureId: 'feat-passkey-biometrics',
-    featureName: 'Passkey WebAuthn Biometrics',
-    category: 'Authentication & Security',
-    status: 'IN_DEVELOPMENT',
-    description: 'FIDO2 WebAuthn biometric passkey fallback authentication for mobile and web banking.',
-    github: {
-      filePath: 'src/auth/webauthnService.ts',
-      commitSha: 'e2f1a90',
-      url: 'https://github.com/smartbank-io/banking-core-api/blob/main/src/auth/webauthnService.ts',
-    },
-    jira: {
-      issueKey: 'BANK-112',
-      summary: 'FIDO2 WebAuthn Passwordless Auth',
-      status: 'In Development',
-      assignee: 'Alex Morgan',
-      url: 'https://smartbank.atlassian.net/browse/BANK-112',
-    },
-    gdrive: {
-      documentName: 'SEC-AUDIT-2024-05-22.md',
-      section: '§ Security Directive & Phishing Resistance',
-      author: 'Rachel Wei (CISO)',
-      url: 'https://drive.google.com/file/d/sample-sec-audit',
-    },
-  },
-  {
-    featureId: 'feat-notification-system',
-    featureName: 'Notification Engine',
-    category: 'Platform Services',
-    status: 'PROPOSED',
-    description: 'Real-time multi-channel notification dispatcher supporting push, SMS, and email.',
-    github: {
-      filePath: 'src/notifications/eventDispatcher.ts',
-      commitSha: '7c3b90a',
-      url: 'https://github.com/smartbank-io/banking-core-api/blob/main/src/notifications/eventDispatcher.ts',
-    },
-    jira: {
-      issueKey: 'BANK-115',
-      summary: 'Real-time Multi-channel Notification Engine',
-      status: 'Proposed',
-      assignee: 'Sarah Chen',
-      url: 'https://smartbank.atlassian.net/browse/BANK-115',
-    },
-    gdrive: {
-      documentName: 'PRD-2024-Authentication-v1.0.md',
-      section: '§ 3.0 Multi-Factor Carrier Notification Delivery',
-      author: 'Sarah Chen (Lead PM)',
-      url: 'https://drive.google.com/file/d/sample-prd-auth',
-    },
-  },
-];
-
 export const ConnectedSourcesPage: React.FC<ConnectedSourcesPageProps> = ({
   onNavigateToTab,
   onSelectFeature,
 }) => {
-  const { currentWorkspace, refreshData } = useWorkspace();
+  const { currentWorkspace, refreshData, features, events, selectWorkspace, loadWorkspaces } = useWorkspace();
+  const { user, linkGitHubAccount, loading } = useAuth();
   const [search, setSearch] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+
+  // GitHub Real Account & Repository State
+  const [activeSubTab, setActiveSubTab] = useState<'matrix' | 'github_repos'>('github_repos');
+  const [githubStatus, setGithubStatus] = useState<any>(null);
+  const [loadingStatus, setLoadingStatus] = useState<boolean>(true);
+  const [githubRepos, setGithubRepos] = useState<any[]>([]);
+  const [loadingRepos, setLoadingRepos] = useState(false);
+  const [repoError, setRepoError] = useState<{ message: string; is401?: boolean } | null>(null);
+  const [oauthScopes, setOauthScopes] = useState<string | null>(null);
+  const [repoSearch, setRepoSearch] = useState('');
+  const [trackingInProgress, setTrackingInProgress] = useState<Record<string, boolean>>({});
+  const [isTrackingAll, setIsTrackingAll] = useState(false);
+  const [showPermissions, setShowPermissions] = useState(false);
+  const [includePrivate, setIncludePrivate] = useState(false);
+
+  // Real, dynamically generated Feature-to-Source traces from workspace data
+  const featureTraces: FeatureSourceTrace[] = (features || []).map((feat) => {
+    const featEvents = (events || []).filter((e) => e.featureId === feat.id);
+    const latestEvent = featEvents[0];
+    return {
+      featureId: feat.id,
+      featureName: feat.name,
+      category: feat.module || 'General',
+      status: (feat.currentStatus as any) || 'IMPLEMENTED',
+      description: feat.description || `Tracking feature for ${feat.name}`,
+      github: {
+        filePath: feat.name,
+        commitSha: latestEvent?.sourceRecordId ? latestEvent.sourceRecordId.replace('gh-commit-', '') : 'HEAD',
+        url: latestEvent?.evidenceText || `https://github.com/`,
+      },
+      jira: {
+        issueKey: feat.id.slice(0, 8).toUpperCase(),
+        summary: feat.name,
+        status: feat.currentStatus,
+        assignee: latestEvent?.person || 'Developer',
+        url: '#',
+      },
+      gdrive: {
+        documentName: `${feat.name} Specification`,
+        section: '§ Requirements & Scope',
+        author: latestEvent?.person || 'Lead Engineer',
+        url: '#',
+      },
+    };
+  });
+
+  const getAuthHeaders = async (): Promise<Record<string, string>> => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (auth) {
+      try {
+        if (typeof (auth as any).authStateReady === 'function') {
+          await (auth as any).authStateReady().catch(() => {});
+        }
+        let currentFbUser = auth.currentUser;
+        if (!currentFbUser) {
+          currentFbUser = await new Promise<FirebaseUser | null>((resolve) => {
+            const unsub = onAuthStateChanged(auth!, (u: FirebaseUser | null) => {
+              unsub();
+              resolve(u);
+            });
+            setTimeout(() => resolve(null), 3000);
+          });
+        }
+        if (currentFbUser) {
+          const token = await currentFbUser.getIdToken();
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+      } catch (err) {
+        console.warn('Failed to obtain Firebase ID token:', err);
+      }
+    }
+    return headers;
+  };
+
+  const fetchGitHubStatus = async () => {
+    setLoadingStatus(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/github/status', { headers });
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(
+          'Backend API server is not running on this domain. To use GitHub integration, open AEVORA via your local server (http://localhost:5173 or on mobile via your network IP).'
+        );
+      }
+      if (res.ok) {
+        const data = await res.json();
+        setGithubStatus(data);
+        if (data.scopes) setOauthScopes(data.scopes);
+        if (data.connected) {
+          await fetchGitHubRepos();
+        }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        console.warn('GitHub status error:', res.status, errData);
+        if (res.status === 401) {
+          setSyncFeedback('Authentication required. Please sign in to link your GitHub repositories.');
+        } else if (errData.error) {
+          setSyncFeedback(`GitHub status error: ${errData.error}`);
+        }
+      }
+    } catch (e: any) {
+      console.warn('Failed to fetch GitHub status:', e);
+      setSyncFeedback(e.message || 'Failed to check GitHub status');
+    } finally {
+      setLoadingStatus(false);
+    }
+  };
+
+  const fetchGitHubRepos = async () => {
+    setLoadingRepos(true);
+    setRepoError(null);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/github/repos', { headers });
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error('API server returned non-JSON content. Ensure the backend server is running.');
+      }
+      const scopesHeader = res.headers.get('x-oauth-scopes');
+      if (scopesHeader) setOauthScopes(scopesHeader);
+
+      const data = await res.json();
+      if (!res.ok) {
+        setRepoError({
+          message: data.error || 'Failed to fetch repositories',
+          is401: res.status === 401 || data.code === 'RECONNECT_REQUIRED',
+        });
+        setGithubRepos([]);
+      } else {
+        setGithubRepos(data.repositories || []);
+        if (data.scopes) setOauthScopes(data.scopes);
+        setRepoError(null);
+      }
+    } catch (e: any) {
+      setRepoError({ message: e.message || 'Network error fetching repositories' });
+    } finally {
+      setLoadingRepos(false);
+    }
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+    const run = async () => {
+      if (loading) return;
+      if (auth && typeof (auth as any).authStateReady === 'function') {
+        await (auth as any).authStateReady().catch(() => {});
+      }
+      if (isMounted) {
+        await fetchGitHubStatus();
+      }
+    };
+    run();
+    return () => { isMounted = false; };
+  }, [user, loading]);
+
+  const handleConnectGitHub = async () => {
+    try {
+      setSyncFeedback('Opening GitHub authorization popup…');
+      const res = await linkGitHubAccount(includePrivate);
+      if (res.success) {
+        setSyncFeedback('GitHub connected successfully! Fetching your repositories…');
+        await fetchGitHubStatus();
+        await fetchGitHubRepos();
+      } else {
+        setSyncFeedback(`GitHub connection: ${res.error}`);
+      }
+    } catch (err: any) {
+      setSyncFeedback(`Error connecting GitHub: ${err.message}`);
+    }
+  };
+
+  const handleStartTracking = async (repoFullName: string) => {
+    setTrackingInProgress((prev) => ({ ...prev, [repoFullName]: true }));
+    try {
+      const headers = await getAuthHeaders();
+      const wid = currentWorkspace?.id || 'default-workspace';
+      const res = await fetch('/api/github/track', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ repo_full_name: repoFullName, workspaceId: wid }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSyncFeedback(`Started tracking ${repoFullName}! Initial sync imported ${data.synced_events} events.`);
+        await fetchGitHubStatus();
+        await refreshData();
+      } else {
+        setSyncFeedback(`Tracking error: ${data.error}`);
+      }
+    } catch (e: any) {
+      setSyncFeedback(`Failed to track repository: ${e.message}`);
+    } finally {
+      setTrackingInProgress((prev) => ({ ...prev, [repoFullName]: false }));
+    }
+  };
+
+  const handleSelectProjectAsWorkspace = async (repo: any) => {
+    setTrackingInProgress((prev) => ({ ...prev, [repo.full_name]: true }));
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/github/track', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ repo_full_name: repo.full_name }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await loadWorkspaces();
+        if (data.workspace?.id) {
+          selectWorkspace(data.workspace.id);
+          localStorage.setItem('aevora_active_ws', data.workspace.id);
+        }
+        setSyncFeedback(`Successfully set active project to "${repo.full_name}"! Synced ${data.synced_events} events.`);
+        await fetchGitHubStatus();
+        await refreshData();
+      } else {
+        setSyncFeedback(`Error selecting project: ${data.error}`);
+      }
+    } catch (err: any) {
+      setSyncFeedback(`Error: ${err.message}`);
+    } finally {
+      setTrackingInProgress((prev) => ({ ...prev, [repo.full_name]: false }));
+    }
+  };
+
+  const handleTrackAll = async () => {
+    setIsTrackingAll(true);
+    setSyncFeedback('Tracking and syncing all repositories in your GitHub account…');
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/github/track-all', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ workspaceId: currentWorkspace?.id }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await loadWorkspaces();
+        setSyncFeedback(`Successfully tracked all ${data.trackedCount} repositories! Commits and PRs are live.`);
+        await fetchGitHubStatus();
+        await refreshData();
+      } else {
+        setSyncFeedback(`Track all error: ${data.error}`);
+      }
+    } catch (err: any) {
+      setSyncFeedback(`Failed to track all repositories: ${err.message}`);
+    } finally {
+      setIsTrackingAll(false);
+    }
+  };
+
+  const handleStopTracking = async (repoFullName: string) => {
+    setTrackingInProgress((prev) => ({ ...prev, [repoFullName]: true }));
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/github/untrack', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ repo_full_name: repoFullName }),
+      });
+      if (res.ok) {
+        setSyncFeedback(`Stopped tracking ${repoFullName}.`);
+        await fetchGitHubStatus();
+      }
+    } catch (e: any) {
+      setSyncFeedback(`Error stopping tracking: ${e.message}`);
+    } finally {
+      setTrackingInProgress((prev) => ({ ...prev, [repoFullName]: false }));
+    }
+  };
+
+  const handleSyncRepo = async (repoFullName: string) => {
+    setTrackingInProgress((prev) => ({ ...prev, [repoFullName]: true }));
+    try {
+      const headers = await getAuthHeaders();
+      const wid = currentWorkspace?.id || 'default-workspace';
+      const res = await fetch('/api/github/sync', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ repo_full_name: repoFullName, workspaceId: wid }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSyncFeedback(`Synced ${repoFullName}: ${data.synced_events} events imported.`);
+        await fetchGitHubStatus();
+        await refreshData();
+      }
+    } catch (e: any) {
+      setSyncFeedback(`Sync error: ${e.message}`);
+    } finally {
+      setTrackingInProgress((prev) => ({ ...prev, [repoFullName]: false }));
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!confirm('Disconnect GitHub? Stored credentials will be deleted.')) return;
+    try {
+      const headers = await getAuthHeaders();
+      await fetch('/api/github/disconnect', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({}),
+      });
+      setGithubStatus({ connected: false });
+      setGithubRepos([]);
+      setSyncFeedback('GitHub disconnected.');
+    } catch (e: any) {
+      setSyncFeedback(`Error disconnecting: ${e.message}`);
+    }
+  };
 
   const handleSyncAll = async () => {
     setIsSyncing(true);
@@ -205,7 +401,7 @@ export const ConnectedSourcesPage: React.FC<ConnectedSourcesPageProps> = ({
     }
   };
 
-  const filteredMatrix = TRACEABILITY_MATRIX.filter(
+  const filteredMatrix = featureTraces.filter(
     (item) =>
       item.featureName.toLowerCase().includes(search.toLowerCase()) ||
       item.category.toLowerCase().includes(search.toLowerCase()) ||
@@ -250,11 +446,463 @@ export const ConnectedSourcesPage: React.FC<ConnectedSourcesPageProps> = ({
 
       {/* Sync Feedback Toast */}
       {syncFeedback && (
-        <div className="p-3 rounded-2xl bg-brand-success-light text-brand-success border border-brand-success/20 text-xs font-semibold flex items-center gap-2 animate-fade-in">
-          <CheckCircle2 size={15} />
-          <span>{syncFeedback}</span>
+        <div className="p-3.5 rounded-2xl bg-brand-primary/10 border border-brand-primary/20 text-xs font-semibold text-brand-dark dark:text-white flex items-center justify-between gap-3 animate-fade-in shadow-sm">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={16} className="text-brand-primary flex-shrink-0" />
+            <span>{syncFeedback}</span>
+          </div>
+          <button
+            onClick={() => setSyncFeedback(null)}
+            className="text-[11px] text-brand-secondary hover:text-brand-dark dark:hover:text-white"
+          >
+            Dismiss
+          </button>
         </div>
       )}
+
+      {/* ── Sub Navigation Tabs ───────────────────────────────────────── */}
+      <div className="flex items-center gap-3 border-b border-brand-border dark:border-brand-dark-border pb-3">
+        <button
+          onClick={() => setActiveSubTab('github_repos')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeSubTab === 'github_repos'
+              ? 'bg-brand-primary text-white shadow-sm'
+              : 'bg-brand-surface dark:bg-brand-dark-card border border-brand-border dark:border-brand-dark-border text-brand-secondary hover:text-brand-dark dark:hover:text-white'
+          }`}
+        >
+          <Github size={14} />
+          <span>My GitHub Repositories</span>
+          {githubStatus?.connected && (
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 text-white font-mono">
+              {githubStatus.tracked_count || 0} tracked
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('matrix')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeSubTab === 'matrix'
+              ? 'bg-brand-primary text-white shadow-sm'
+              : 'bg-brand-surface dark:bg-brand-dark-card border border-brand-border dark:border-brand-dark-border text-brand-secondary hover:text-brand-dark dark:hover:text-white'
+          }`}
+        >
+          <Layers size={14} />
+          <span>Multi-Source Traceability Matrix</span>
+        </button>
+      </div>
+
+      {/* ── SUBTAB 1: GITHUB REPOSITORIES MANAGER ─────────────────────── */}
+      {activeSubTab === 'github_repos' && (
+        <div className="space-y-6">
+          {loadingStatus ? (
+            <div className="p-12 rounded-3xl bg-brand-surface dark:bg-brand-dark-card border border-brand-border dark:border-brand-dark-border shadow-subtle text-center max-w-xl mx-auto space-y-4 my-8 flex flex-col items-center">
+              <RefreshCw size={28} className="animate-spin text-brand-primary" />
+              <div className="space-y-1">
+                <h3 className="font-extrabold text-sm text-brand-dark dark:text-white">Connecting to GitHub</h3>
+                <p className="text-xs text-brand-secondary">Retrieving your account status and repository list…</p>
+              </div>
+            </div>
+          ) : !githubStatus?.connected ? (
+            /* Connect GitHub Hero */
+            <div className="p-8 rounded-3xl bg-brand-surface dark:bg-brand-dark-card border border-brand-border dark:border-brand-dark-border shadow-subtle text-center max-w-xl mx-auto space-y-5 my-4">
+              <div className="w-16 h-16 rounded-3xl bg-slate-900 text-white flex items-center justify-center mx-auto shadow-md">
+                <Github size={32} />
+              </div>
+
+              <div className="space-y-1.5">
+                <h2 className="text-xl font-black text-brand-dark dark:text-white tracking-tight">
+                  Connect Your GitHub Account
+                </h2>
+                <p className="text-xs text-brand-secondary leading-relaxed max-w-md mx-auto">
+                  Import and track your personal and organization repositories. AEVORA will listen to commits, pull requests, and releases to construct a real-time living history.
+                </p>
+              </div>
+
+              <div className="pt-2 flex flex-col items-center gap-3">
+                <label className="text-xs text-brand-secondary flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={includePrivate}
+                    onChange={(e) => setIncludePrivate(e.target.checked)}
+                    className="accent-brand-primary"
+                  />
+                  <span>Include private repositories (requests <code>repo</code> scope)</span>
+                </label>
+
+                <button
+                  onClick={handleConnectGitHub}
+                  className="px-6 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-2.5 transition-all shadow-md hover:shadow-lg"
+                >
+                  <Github size={16} />
+                  <span>Connect with GitHub</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Connected GitHub Management Dashboard */
+            <div className="space-y-6">
+              {/* Account Status Card */}
+              <div className="p-5 rounded-3xl bg-brand-surface dark:bg-brand-dark-card border border-brand-border dark:border-brand-dark-border shadow-subtle flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  {githubStatus.avatar_url ? (
+                    <img
+                      src={githubStatus.avatar_url}
+                      alt={githubStatus.github_username}
+                      className="w-12 h-12 rounded-2xl border border-brand-border dark:border-brand-dark-border object-cover"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-bold">
+                      <Github size={22} />
+                    </div>
+                  )}
+
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-extrabold text-sm text-brand-dark dark:text-white">
+                        {githubStatus.github_username}
+                      </h3>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                        <Check size={10} />
+                        Connected
+                      </span>
+                    </div>
+                    <p className="text-xs text-brand-secondary mt-0.5">
+                      {githubStatus.tracked_count || 0} active tracked repositories · Webhooks active
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={fetchGitHubRepos}
+                    disabled={loadingRepos}
+                    className="px-3.5 py-1.5 rounded-xl border border-brand-border dark:border-brand-dark-border text-xs font-semibold text-brand-dark dark:text-white hover:bg-brand-bg dark:hover:bg-brand-dark flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw size={13} className={loadingRepos ? 'animate-spin' : ''} />
+                    <span>Refresh Repos</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowPermissions(!showPermissions)}
+                    className="px-3.5 py-1.5 rounded-xl border border-brand-border dark:border-brand-dark-border text-xs font-semibold text-brand-dark dark:text-white hover:bg-brand-bg dark:hover:bg-brand-dark flex items-center gap-1.5 transition-colors"
+                  >
+                    <Shield size={13} />
+                    <span>Permissions</span>
+                  </button>
+
+                  <button
+                    onClick={handleDisconnect}
+                    className="px-3.5 py-1.5 rounded-xl border border-rose-500/30 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              </div>
+
+              {/* Permissions & Security Drawer */}
+              {showPermissions && (
+                <div className="p-5 rounded-2xl bg-brand-bg/50 dark:bg-brand-dark/50 border border-brand-border dark:border-brand-dark-border space-y-3 animate-fade-in text-xs text-brand-secondary">
+                  <div className="flex items-center gap-2 font-bold text-brand-dark dark:text-white">
+                    <ShieldCheck size={16} className="text-emerald-500" />
+                    <span>What AEVORA Can Access</span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-1 pl-1">
+                    <li><strong>Read Repository Metadata & Commits:</strong> To index timestamps, authors, and commit messages.</li>
+                    <li><strong>Read Pull Requests & Issues:</strong> To detect feature proposals, approvals, and merges.</li>
+                    <li><strong>Manage Webhooks:</strong> Registers a dedicated webhook so live updates stream to AEVORA instantly.</li>
+                    <li><strong>Encrypted at Rest:</strong> Your token is secured using AES-256-GCM. We never write code or push commits to your repos.</li>
+                  </ul>
+                  <p className="pt-1">
+                    You can inspect or revoke access at any time in{' '}
+                    <a
+                      href="https://github.com/settings/applications"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-brand-primary underline"
+                    >
+                      GitHub Developer Settings ↗
+                    </a>.
+                  </p>
+                </div>
+              )}
+
+              {/* Granted Scopes & Settings Banner */}
+              <div className="p-3 rounded-2xl bg-brand-bg/50 dark:bg-brand-dark/50 border border-brand-border dark:border-brand-dark-border text-xs text-brand-secondary flex flex-col md:flex-row md:items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-brand-dark dark:text-white">Granted Scopes:</span>
+                  <code className="text-[11px] px-2 py-0.5 rounded-md bg-brand-surface dark:bg-brand-dark-card border border-brand-border text-brand-primary font-mono">
+                    {oauthScopes || githubStatus.scopes || 'read:user, user:email, public_repo, admin:repo_hook'}
+                  </code>
+                </div>
+                <span className="text-[11px] opacity-80">
+                  Private repos need <code>repo</code> scope · Org repos may require third-party owner approval
+                </span>
+              </div>
+
+              {/* Error State */}
+              {repoError && (
+                <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs space-y-2.5 animate-fade-in">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <AlertCircle size={16} className="flex-shrink-0" />
+                    <span>{repoError.message}</span>
+                  </div>
+                  <div className="flex items-center gap-2 pt-0.5">
+                    <button
+                      onClick={handleConnectGitHub}
+                      className="px-3.5 py-1.5 rounded-xl bg-slate-900 text-white font-semibold text-xs hover:bg-slate-800 transition-colors shadow-sm"
+                    >
+                      Reconnect GitHub
+                    </button>
+                    <button
+                      onClick={fetchGitHubRepos}
+                      className="px-3.5 py-1.5 rounded-xl border border-rose-500/30 font-semibold text-xs hover:bg-rose-500/10 transition-colors"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Project & Repository Selector Banner */}
+              <div className="p-6 rounded-3xl bg-gradient-to-r from-brand-primary/10 via-purple-500/5 to-transparent border border-brand-primary/25 shadow-subtle space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <h3 className="font-black text-sm text-brand-dark dark:text-white tracking-tight">
+                        Select Which Project / Repository You Want to Track
+                      </h3>
+                    </div>
+                    <p className="text-xs text-brand-secondary max-w-xl">
+                      Pick any GitHub repository below to set it as your active workspace project in AEVORA, or click <strong>Track All Repositories</strong> to index all repositories across your account.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleTrackAll}
+                      disabled={isTrackingAll || loadingRepos}
+                      className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-2 shadow-md hover:shadow-lg transition-all disabled:opacity-50"
+                    >
+                      {isTrackingAll ? (
+                        <>
+                          <RefreshCw size={13} className="animate-spin" />
+                          <span>Tracking All Repos…</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles size={13} className="text-amber-400" />
+                          <span>⚡ Track All Repositories</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {currentWorkspace && (
+                  <div className="flex items-center gap-2 text-xs pt-2 border-t border-brand-primary/15 text-brand-secondary flex-wrap">
+                    <span>Current Project Workspace:</span>
+                    <span className="font-bold text-brand-dark dark:text-white bg-brand-surface dark:bg-brand-dark-card px-2.5 py-0.5 rounded-lg border border-brand-border">
+                      📁 {currentWorkspace.name}
+                    </span>
+                    <span className="opacity-60">• Select any repository below to switch project workspace</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Search & Filter Repositories */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="relative w-full sm:w-80">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-secondary" />
+                  <input
+                    type="text"
+                    value={repoSearch}
+                    onChange={(e) => setRepoSearch(e.target.value)}
+                    placeholder="Search your repositories..."
+                    className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-brand-surface dark:bg-brand-dark-card border border-brand-border dark:border-brand-dark-border focus:outline-none focus:ring-2 focus:ring-brand-primary text-brand-dark dark:text-white"
+                  />
+                </div>
+
+                <span className="text-xs text-brand-secondary">
+                  Showing {githubRepos.filter((r) => r.full_name.toLowerCase().includes(repoSearch.toLowerCase())).length} of {githubRepos.length} repositories
+                </span>
+              </div>
+
+              {/* Repositories List / UI States */}
+              {loadingRepos ? (
+                <div className="p-12 text-center text-xs text-brand-secondary space-y-2">
+                  <RefreshCw size={24} className="animate-spin text-brand-primary mx-auto" />
+                  <p>Fetching repositories from GitHub API…</p>
+                </div>
+              ) : repoError ? null : githubRepos.length === 0 ? (
+                <div className="p-8 text-center text-xs text-brand-secondary border border-dashed border-brand-border dark:border-brand-dark-border rounded-2xl space-y-3">
+                  <p className="font-semibold text-sm text-brand-dark dark:text-white">
+                    No repositories found. Check your GitHub permissions
+                  </p>
+                  <p className="text-[11px] max-w-md mx-auto leading-relaxed">
+                    If your repositories are private, ensure the "Include private repositories" option is selected. Organization repositories may require administrator approval under GitHub third-party access settings.
+                  </p>
+                  <div className="flex items-center justify-center gap-2 pt-1">
+                    <button
+                      onClick={handleConnectGitHub}
+                      className="px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold text-xs hover:bg-slate-800 transition-all shadow-sm"
+                    >
+                      Reconnect GitHub
+                    </button>
+                    <button
+                      onClick={fetchGitHubRepos}
+                      className="px-4 py-2 rounded-xl border border-brand-border dark:border-brand-dark-border font-semibold text-xs hover:bg-brand-bg dark:hover:bg-brand-dark transition-colors"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {githubRepos
+                    .filter((r) => r.full_name.toLowerCase().includes(repoSearch.toLowerCase()))
+                    .map((repo) => {
+                      const inProgress = trackingInProgress[repo.full_name];
+                      return (
+                        <div
+                          key={repo.id}
+                          className={`p-5 rounded-3xl border transition-all flex flex-col justify-between space-y-4 shadow-subtle ${
+                            repo.tracked
+                              ? 'bg-brand-surface dark:bg-brand-dark-card border-brand-primary/40 ring-1 ring-brand-primary/20'
+                              : 'bg-brand-surface dark:bg-brand-dark-card border-brand-border dark:border-brand-dark-border'
+                          }`}
+                        >
+                          <div className="space-y-2.5">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <a
+                                  href={repo.html_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-extrabold text-sm text-brand-dark dark:text-white hover:text-brand-primary transition-colors flex items-center gap-1"
+                                >
+                                  <span>{repo.full_name}</span>
+                                  <ExternalLink size={12} className="opacity-50" />
+                                </a>
+
+                                {repo.private ? (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                                    <Lock size={10} />
+                                    Private
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20 flex items-center gap-1">
+                                    <Unlock size={10} />
+                                    Public
+                                  </span>
+                                )}
+
+                                {repo.language && (
+                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-brand-primary/10 text-brand-primary">
+                                    {repo.language}
+                                  </span>
+                                )}
+                              </div>
+
+                              {repo.tracked && (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1 flex-shrink-0">
+                                  <Activity size={10} className="animate-pulse" />
+                                  Tracking Live
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="text-xs text-brand-secondary line-clamp-2">
+                              {repo.description || 'No description provided.'}
+                            </p>
+
+                            {repo.tracked && (
+                              <div className="text-[11px] text-brand-secondary font-mono flex items-center gap-3 pt-1 border-t border-brand-border/60 dark:border-brand-dark-border/60">
+                                <span>Indexed events: <strong className="text-brand-dark dark:text-white">{repo.event_count || 0}</strong></span>
+                                {repo.last_sync_at && (
+                                  <span>Synced: {new Date(repo.last_sync_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Actions */}
+                          <div className="pt-2 flex items-center justify-between gap-2 border-t border-brand-border/60 dark:border-brand-dark-border/60">
+                            <span className="text-[11px] text-brand-secondary">
+                              {repo.admin ? '✓ Admin access' : 'Read-only access'}
+                            </span>
+
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => handleSelectProjectAsWorkspace(repo)}
+                                disabled={inProgress}
+                                className="px-3 py-1.5 rounded-xl bg-brand-surface dark:bg-brand-dark-card border border-brand-border hover:border-brand-primary text-brand-dark dark:text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm disabled:opacity-50"
+                                title="Set this repository as your active project workspace in AEVORA"
+                              >
+                                <Folder size={12} className="text-brand-primary" />
+                                <span>Set Active Project</span>
+                              </button>
+
+                              {repo.tracked ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSyncRepo(repo.full_name)}
+                                    disabled={inProgress}
+                                    className="px-3 py-1.5 rounded-xl border border-brand-border dark:border-brand-dark-border text-xs font-semibold text-brand-dark dark:text-white hover:bg-brand-bg dark:hover:bg-brand-dark flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                                  >
+                                    <RefreshCw size={12} className={inProgress ? 'animate-spin' : ''} />
+                                    <span>Sync</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStopTracking(repo.full_name)}
+                                    disabled={inProgress}
+                                    className="px-3 py-1.5 rounded-xl border border-rose-500/30 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                                  >
+                                    <Trash2 size={12} />
+                                    <span>Stop Tracking</span>
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartTracking(repo.full_name)}
+                                  disabled={inProgress}
+                                  className="px-4 py-1.5 rounded-xl bg-brand-primary hover:bg-brand-primary-hover text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm hover:shadow-md disabled:opacity-50"
+                                >
+                                  {inProgress ? (
+                                    <>
+                                      <RefreshCw size={12} className="animate-spin" />
+                                      <span>Starting…</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Activity size={12} />
+                                      <span>Start Tracking</span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── SUBTAB 2: MULTI-SOURCE TRACEABILITY MATRIX ────────────────── */}
+      {activeSubTab === 'matrix' && (
+        <div className="space-y-6">
 
       {/* ── Top 3 Connected Sources Cards ─────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -268,30 +916,36 @@ export const ConnectedSourcesPage: React.FC<ConnectedSourcesPageProps> = ({
                 </div>
                 <h3 className="font-extrabold text-sm text-brand-dark dark:text-white">GitHub</h3>
               </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                Connected
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                githubStatus?.connected
+                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                  : 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20'
+              }`}>
+                {githubStatus?.connected ? 'Connected' : 'Not Connected'}
               </span>
             </div>
 
             <div className="text-xs text-brand-secondary space-y-1 font-mono">
               <p>
-                Repository:{' '}
+                Project:{' '}
                 <strong className="text-brand-dark dark:text-white font-sans">
-                  smartbank-io/banking-core-api
+                  {currentWorkspace?.name || githubStatus?.tracked_repositories?.[0]?.full_name || 'Select a repository'}
                 </strong>
               </p>
               <p>
-                Branch:{' '}
-                <strong className="text-brand-dark dark:text-white font-sans">main</strong>
+                Tracked Repos:{' '}
+                <strong className="text-brand-dark dark:text-white font-sans">
+                  {githubStatus?.tracked_count || 0} active
+                </strong>
               </p>
             </div>
           </div>
 
           <button
-            onClick={() => onNavigateToTab && onNavigateToTab('github-explorer')}
+            onClick={() => setActiveSubTab('github_repos')}
             className="text-xs font-bold text-brand-primary hover:text-brand-primary-hover inline-flex items-center gap-1 self-start pt-1"
           >
-            <span>Browse Files</span>
+            <span>Manage Repositories</span>
             <ArrowRight size={13} />
           </button>
         </div>
@@ -308,36 +962,33 @@ export const ConnectedSourcesPage: React.FC<ConnectedSourcesPageProps> = ({
                   Atlassian Jira
                 </h3>
               </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                Active Sync
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20">
+                Optional Source
               </span>
             </div>
 
             <div className="text-xs text-brand-secondary space-y-1">
               <p>
-                Project:{' '}
+                Issue Tracking:{' '}
                 <strong className="text-brand-dark dark:text-white">
-                  BANK (Smart Banking NextGen)
+                  Synced via GitHub PRs & Issues
                 </strong>
               </p>
               <p>
-                <strong className="text-brand-dark dark:text-white">5 Issues Indexed</strong>
+                <strong className="text-brand-dark dark:text-white">Automatic extraction active</strong>
               </p>
             </div>
           </div>
 
-          <a
-            href="https://smartbank.atlassian.net"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs font-bold text-brand-primary hover:text-brand-primary-hover inline-flex items-center gap-1 self-start pt-1"
+          <button
+            onClick={() => setActiveSubTab('github_repos')}
+            className="text-xs font-bold text-brand-secondary hover:text-brand-dark dark:hover:text-white inline-flex items-center gap-1 self-start pt-1"
           >
-            <span>Open in Jira</span>
-            <ExternalLink size={13} />
-          </a>
+            <span>Linked with GitHub Issues</span>
+          </button>
         </div>
 
-        {/* Card 3: Google Drive */}
+        {/* Card 3: Project Documents & Specs */}
         <div className="p-5 rounded-3xl bg-brand-surface dark:bg-brand-dark-card border border-brand-border dark:border-brand-dark-border shadow-subtle flex flex-col justify-between space-y-4">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -346,36 +997,34 @@ export const ConnectedSourcesPage: React.FC<ConnectedSourcesPageProps> = ({
                   <Folder size={18} />
                 </div>
                 <h3 className="font-extrabold text-sm text-brand-dark dark:text-white">
-                  Google Drive
+                  Project Records
                 </h3>
               </div>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                Synchronized
+                Ready
               </span>
             </div>
 
             <div className="text-xs text-brand-secondary space-y-1">
               <p>
-                Folder:{' '}
+                Documents & ADRs:{' '}
                 <strong className="text-brand-dark dark:text-white">
-                  Architecture & Specifications
+                  Markdown, PRD, PDF upload
                 </strong>
               </p>
               <p>
-                <strong className="text-brand-dark dark:text-white">4 specs analyzed</strong>
+                <strong className="text-brand-dark dark:text-white">Temporal Parser Ready</strong>
               </p>
             </div>
           </div>
 
-          <a
-            href="https://drive.google.com"
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={() => onNavigateToTab && onNavigateToTab('records')}
             className="text-xs font-bold text-brand-primary hover:text-brand-primary-hover inline-flex items-center gap-1 self-start pt-1"
           >
-            <span>Open Drive</span>
-            <ExternalLink size={13} />
-          </a>
+            <span>Upload Records</span>
+            <ArrowRight size={13} />
+          </button>
         </div>
       </div>
 
@@ -535,12 +1184,25 @@ export const ConnectedSourcesPage: React.FC<ConnectedSourcesPageProps> = ({
           ))}
 
           {filteredMatrix.length === 0 && (
-            <div className="p-12 text-center text-xs text-brand-secondary bg-brand-surface dark:bg-brand-dark-card rounded-3xl border border-brand-border dark:border-brand-dark-border">
-              No matching features found in the traceability matrix.
+            <div className="p-12 text-center text-xs text-brand-secondary bg-brand-surface dark:bg-brand-dark-card rounded-3xl border border-dashed border-brand-border dark:border-brand-dark-border space-y-3">
+              <Layers size={36} className="mx-auto text-brand-secondary opacity-40" />
+              <h3 className="font-bold text-sm text-brand-dark dark:text-white">No Feature Traces in this Workspace</h3>
+              <p className="max-w-md mx-auto text-xs leading-relaxed">
+                Connect your GitHub repository and track your project to automatically ingest real commits, issues, and pull requests into the Traceability Matrix.
+              </p>
+              <button
+                type="button"
+                onClick={() => setActiveSubTab('github_repos')}
+                className="px-4 py-2 rounded-xl bg-brand-primary text-white font-bold text-xs hover:bg-brand-primary-hover shadow-sm transition-all"
+              >
+                Select GitHub Project to Track
+              </button>
             </div>
           )}
         </div>
       </div>
+      </div>
+      )}
     </div>
   );
 };

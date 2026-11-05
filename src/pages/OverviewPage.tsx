@@ -13,6 +13,7 @@ import {
   TrendingUp,
   Activity,
   Plus,
+  Github,
 } from 'lucide-react';
 import {
   BarChart,
@@ -130,6 +131,32 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
           </button>
         </div>
       </div>
+
+      {/* GitHub Repository Selection Prompt Banner */}
+      {stats.totalFeatures === 0 && stats.totalRecords === 0 && (
+        <div className="p-5 rounded-3xl bg-gradient-to-r from-slate-900 to-indigo-950 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-white/10 text-white flex items-center justify-center flex-shrink-0 border border-white/10">
+              <Github size={22} />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-sm text-white">
+                Select Which Project / Repository You Want to Track
+              </h3>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Connect your GitHub account in Connected Sources to import your repositories, track features, and sync live commits.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setCurrentTab('connected-sources')}
+            className="px-4 py-2.5 rounded-xl bg-brand-primary hover:bg-brand-primary-hover text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 whitespace-nowrap self-start sm:self-auto"
+          >
+            <span>Select Project Repository</span>
+            <ArrowRight size={13} />
+          </button>
+        </div>
+      )}
 
       {/* Real-Time Live Data Stream Pipeline & Interactive Dispatcher */}
       <LiveStreamController />

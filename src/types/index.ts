@@ -211,6 +211,7 @@ export interface NotificationItem {
   read: boolean;
   timestamp: string;
   link?: string;
+  repo?: string;
   needs_reason?: number;
   event_ids?: string[];
   actor?: string;

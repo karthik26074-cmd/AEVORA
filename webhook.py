@@ -77,6 +77,32 @@ class GitHubEventStorage:
                     delivery_id TEXT
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS user_github_tokens (
+                    user_id TEXT PRIMARY KEY,
+                    workspace_id TEXT,
+                    encrypted_token TEXT NOT NULL,
+                    iv TEXT NOT NULL,
+                    auth_tag TEXT NOT NULL,
+                    scopes TEXT,
+                    github_username TEXT,
+                    avatar_url TEXT,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS repositories (
+                    id TEXT PRIMARY KEY,
+                    github_id INTEGER,
+                    full_name TEXT NOT NULL,
+                    workspace_id TEXT NOT NULL,
+                    webhook_id INTEGER,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    connected_at TEXT NOT NULL,
+                    last_sync_at TEXT,
+                    event_count INTEGER DEFAULT 0
+                )
+            """)
             # Additive migration on events table
             cur = conn.execute("PRAGMA table_info(events)")
             cols = [row["name"] for row in cur.fetchall()]
@@ -84,6 +110,12 @@ class GitHubEventStorage:
                 conn.execute("ALTER TABLE events ADD COLUMN related_source_id TEXT")
             if "details" not in cols:
                 conn.execute("ALTER TABLE events ADD COLUMN details TEXT")
+            if "workspace_id" not in cols:
+                conn.execute("ALTER TABLE events ADD COLUMN workspace_id TEXT")
+            n_cur = conn.execute("PRAGMA table_info(notifications)")
+            n_cols = [row["name"] for row in n_cur.fetchall()]
+            if "workspace_id" not in n_cols:
+                conn.execute("ALTER TABLE notifications ADD COLUMN workspace_id TEXT")
             conn.commit()
 
     def log_chat(self, message: str, intent: str, method_used: str) -> None:
@@ -355,18 +387,26 @@ class GitHubEventStorage:
             row = cur.fetchone()
             return self._row_to_dict(row) if row else None
 
-    def get_product_overview_data(self) -> Dict[str, Any]:
+    def get_product_overview_data(self, live_only: bool = False) -> Dict[str, Any]:
         """Calculates live server facts for product_overview without LLM math."""
+        seed_filter = (
+            " WHERE source_id NOT IN ('gh-pr-104-otp-verified', 'sec-audit-otp-mod', 'prd-auth-v1-otp', 'gh-pr-112-rename-checkout', 'jira-bank-201-payment-approved', 'gh-commit-gateway-router', 'gh-commit-reconciliation-worker', 'jira-bank-205-passkey-proposed') AND (details IS NULL OR details NOT LIKE '%\"seed\":true%')"
+            if live_only else ""
+        )
         with self._get_connection() as conn:
-            cur = conn.execute("SELECT count(*) as cnt FROM events")
+            cur = conn.execute(f"SELECT count(*) as cnt FROM events{seed_filter}")
             total_events = cur.fetchone()["cnt"]
             if total_events == 0:
                 return {"empty": True, "total_events": 0}
 
-            cur = conn.execute("SELECT count(DISTINCT entity_name) as cnt FROM events WHERE entity_name IS NOT NULL AND entity_name != ''")
+            feat_where = (
+                " WHERE entity_name IS NOT NULL AND entity_name != '' AND source_id NOT IN ('gh-pr-104-otp-verified', 'sec-audit-otp-mod', 'prd-auth-v1-otp', 'gh-pr-112-rename-checkout', 'jira-bank-201-payment-approved', 'gh-commit-gateway-router', 'gh-commit-reconciliation-worker', 'jira-bank-205-passkey-proposed') AND (details IS NULL OR details NOT LIKE '%\"seed\":true%')"
+                if live_only else " WHERE entity_name IS NOT NULL AND entity_name != ''"
+            )
+            cur = conn.execute(f"SELECT count(DISTINCT entity_name) as cnt FROM events{feat_where}")
             features_tracked = cur.fetchone()["cnt"]
 
-            cur = conn.execute("SELECT status, count(*) as cnt FROM events GROUP BY status")
+            cur = conn.execute(f"SELECT status, count(*) as cnt FROM events{seed_filter} GROUP BY status")
             status_rows = cur.fetchall()
             status_breakdown: Dict[str, int] = {
                 "proposed": 0,
@@ -381,20 +421,24 @@ class GitHubEventStorage:
                 st = (r["status"] or "").lower()
                 cnt = r["cnt"]
                 matched = False
-                for target_st in ["proposed", "approved", "implemented", "rejected", "removed", "renamed", "modified"]:
+                for target_st in ["proposed", "approved", "implemented", "rejected", "removed", "renamed"]:
                     if target_st in st or (target_st == "implemented" and "merged" in st):
                         status_breakdown[target_st] += cnt
                         matched = True
                         break
                 if not matched:
-                    status_breakdown[st] = cnt
+                    status_breakdown[st] = (status_breakdown.get(st) or 0) + cnt
 
-            cur = conn.execute("SELECT min(event_date) as min_date, max(event_date) as max_date FROM events WHERE event_date IS NOT NULL AND event_date != ''")
+            date_where = (
+                " WHERE event_date IS NOT NULL AND event_date != '' AND source_id NOT IN ('gh-pr-104-otp-verified', 'sec-audit-otp-mod', 'prd-auth-v1-otp', 'gh-pr-112-rename-checkout', 'jira-bank-201-payment-approved', 'gh-commit-gateway-router', 'gh-commit-reconciliation-worker', 'jira-bank-205-passkey-proposed') AND (details IS NULL OR details NOT LIKE '%\"seed\":true%')"
+                if live_only else " WHERE event_date IS NOT NULL AND event_date != ''"
+            )
+            cur = conn.execute(f"SELECT min(event_date) as min_date, max(event_date) as max_date FROM events{date_where}")
             row = cur.fetchone()
             min_date = row["min_date"] or "unknown"
             max_date = row["max_date"] or "unknown"
 
-            cur = conn.execute("SELECT * FROM events ORDER BY event_date DESC, id DESC LIMIT 3")
+            cur = conn.execute(f"SELECT * FROM events{seed_filter} ORDER BY event_date DESC, id DESC LIMIT 3")
             recent_events = [self._row_to_dict(r) for r in cur.fetchall()]
 
             return {
@@ -417,13 +461,21 @@ class GitHubEventStorage:
             rows = cur.fetchall()
             return [r["entity_name"] for r in rows if r["entity_name"]]
 
-    def search_events(self, query: str, date_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+    def search_events(self, query: str, date_filter: Optional[str] = None, live_only: bool = False) -> List[Dict[str, Any]]:
         """
         Retrieves matching events resolving renames via old_name/new_name,
         and optionally filtering by date.
         """
         q = query.lower().strip()
         all_events = self.get_all()
+        if live_only:
+            seed_ids = {
+                'gh-pr-104-otp-verified', 'sec-audit-otp-mod', 'prd-auth-v1-otp',
+                'gh-pr-112-rename-checkout', 'jira-bank-201-payment-approved',
+                'gh-commit-gateway-router', 'gh-commit-reconciliation-worker',
+                'jira-bank-205-passkey-proposed'
+            }
+            all_events = [e for e in all_events if e.get("source_id") not in seed_ids and '"seed":true' not in (e.get("details") or "")]
         if not all_events:
             return []
 
@@ -801,6 +853,20 @@ def broadcast_sse(event_type: str, data: Dict[str, Any]):
     for q in list(_sse_subscribers):
         try:
             q.put_nowait(msg)
+        except Exception:
+            pass
+
+    # Forward notification to Node on port 3001 so connected browser clients receive it instantly
+    if event_type == "notification":
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                "http://localhost:3001/api/notifications/broadcast",
+                data=json.dumps(safe_data).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            urllib.request.urlopen(req, timeout=0.5)
         except Exception:
             pass
 
@@ -1439,7 +1505,12 @@ async def add_event_reason_endpoint(
     if re.search(r"\bapproved\b", reason_trimmed, re.IGNORECASE):
         event_status = "approved"
     else:
-        event_status = target_event.get("status", "modified")
+        # Status strictly copies the status of the related event (never "modified")
+        target_status = (target_event.get("status") or "").lower()
+        if target_status and target_status != "modified":
+            event_status = target_status
+        else:
+            event_status = "implemented"
 
     now_iso = datetime.now(timezone.utc).isoformat()
     note_source_id = f"note-{uuid.uuid4()}"
@@ -1801,6 +1872,7 @@ async def chat_endpoint(request: Request):
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
     message = (body.get("message") or body.get("question") or body.get("prompt") or "").strip()
+    live_only = bool(body.get("live_only") or body.get("liveOnly"))
     if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
@@ -1863,7 +1935,7 @@ async def chat_endpoint(request: Request):
 
     # ── Product Overview ─────────────────────────────────────────────────────
     if intent == "product_overview":
-        overview_data = storage.get_product_overview_data()
+        overview_data = storage.get_product_overview_data(live_only=live_only)
         reply, citations = synthesize_product_overview(overview_data, query=message)
         return {
             "intent": "product_overview",
@@ -2232,7 +2304,7 @@ async def chat_endpoint(request: Request):
     date_filter = date_match.group(1) if date_match else None
 
     # Retrieve events strictly from events.db (resolving renames)
-    matched_events = storage.search_events(message, date_filter=date_filter)
+    matched_events = storage.search_events(message, date_filter=date_filter, live_only=live_only)
 
     # If nothing matches in events.db:
     if not matched_events:

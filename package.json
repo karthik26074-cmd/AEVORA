@@ -5,12 +5,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host",
     "build": "tsc && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "tsx watch server/index.ts",
-    "start": "concurrently -n \"SERVER,CLIENT\" -c \"magenta,blue\" \"tsx watch server/index.ts\" \"vite\""
+    "start:prod": "tsx server/index.ts",
+    "clean:seeds": "python scripts/delete_seed_data.py",
+    "start": "concurrently -n \"SERVER,CLIENT\" -c \"magenta,blue\" \"tsx watch server/index.ts\" \"vite --host\""
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
@@ -21,6 +23,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "firebase": "^11.3.0",
+    "firebase-admin": "^14.5.0",
     "lucide-react": "^0.475.0",
     "marked": "^18.1.2",
     "multer": "^1.4.5-lts.1",
@@ -29,7 +32,8 @@
     "recharts": "^2.15.1",
     "tailwind-merge": "^3.0.1",
     "uuid": "^11.1.0",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "tsx": "^4.19.2"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
@@ -45,7 +49,6 @@
     "concurrently": "^9.1.2",
     "postcss": "^8.5.2",
     "tailwindcss": "^3.4.17",
-    "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vite": "^6.1.0"
   }

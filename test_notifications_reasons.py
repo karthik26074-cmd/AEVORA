@@ -243,6 +243,17 @@ def test_post_reason_validation_and_append_only(client):
     assert note_event["status"] == "approved"
     assert note_event["event_type"] == "decided"
 
+    # Reason without 'approved' -> copies target event status (proposed), never 'modified'
+    res_copy_status = client.post(
+        f"/api/events/{target_event['source_id']}/reason",
+        json={"reason": "Updated internal infrastructure migration plan"},
+        headers={"X-API-Key": TEST_API_KEY, "X-User-Name": "Marcus Vance"},
+    )
+    assert res_copy_status.status_code == 200
+    note_copy = res_copy_status.json()
+    assert note_copy["status"] == "proposed"
+    assert note_copy["status"] != "modified"
+
 
 # ============================================================================
 # 5. READ AND READ-ALL ENDPOINTS & UNREAD COUNT

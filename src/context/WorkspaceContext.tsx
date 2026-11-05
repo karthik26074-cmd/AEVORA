@@ -60,11 +60,12 @@ interface WorkspaceContextType {
   updateFeature: (id: string, data: Partial<Feature>) => Promise<Feature>;
   resolveConflict: (id: string, note: string, resolver: string) => Promise<void>;
   reviewConflict: (id: string) => Promise<void>;
-  askAI: (question: string) => Promise<AIChatMessage>;
+  askAI: (question: string, liveOnly?: boolean) => Promise<AIChatMessage>;
   markNotificationRead: (id: string) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
   simulateDemoEvent: () => Promise<{ success: boolean; message: string }>;
   refreshData: () => Promise<void>;
+  loadWorkspaces: () => Promise<void>;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
@@ -214,7 +215,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               notifs.forEach((n: any) => {
                 map.set(n.id, {
                   id: n.id,
-                  workspaceId: currentWorkspace?.id || 'sample-workspace-smart-banking',
+                  workspaceId: currentWorkspace?.id || 'ws-main',
                   title: n.title,
                   message: n.body || n.message || '',
                   type: n.kind || 'INTEGRATION',
@@ -250,7 +251,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             const raw = JSON.parse(e.data);
             const notifItem: NotificationItem = {
               id: raw.id,
-              workspaceId: currentWorkspace?.id || 'sample-workspace-smart-banking',
+              workspaceId: currentWorkspace?.id || 'ws-main',
               title: raw.title,
               message: raw.body || '',
               type: raw.kind || 'push',
@@ -438,11 +439,11 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     await refreshData();
   };
 
-  const askAI = async (question: string): Promise<AIChatMessage> => {
+  const askAI = async (question: string, liveOnly: boolean = false): Promise<AIChatMessage> => {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: question }),
+      body: JSON.stringify({ message: question, live_only: liveOnly }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -487,7 +488,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const simulateDemoEvent = async (): Promise<{ success: boolean; message: string }> => {
-    const wsId = currentWorkspace ? currentWorkspace.id : 'sample-workspace-smart-banking';
+    const wsId = currentWorkspace ? currentWorkspace.id : 'ws-main';
     const res = await fetch('/api/demo/simulate-otp-modification', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -496,6 +497,33 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const data = await res.json();
     await refreshData();
     return data;
+  };
+
+  const dismissToastNotification = () => {
+    setActiveToastNotification(null);
+  };
+
+  const promptReasonForNotification = (notif: EvolyraNotification) => {
+    setActiveToastNotification(notif);
+  };
+
+  const addEventReason = async (sourceId: string, reason: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/events/${encodeURIComponent(sourceId)}/reason`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || err.detail || 'Failed to record reason');
+      }
+      await refreshData();
+      return true;
+    } catch (err) {
+      console.error('[AddEventReason] Error:', err);
+      return false;
+    }
   };
 
   // Calculated Stats
@@ -531,6 +559,10 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         notifications,
         stats,
         unreadNotificationCount,
+        activeToastNotification,
+        dismissToastNotification,
+        promptReasonForNotification,
+        addEventReason,
         isLiveConnected,
         isLoading,
         selectWorkspace,
@@ -549,6 +581,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         markAllNotificationsRead,
         simulateDemoEvent,
         refreshData,
+        loadWorkspaces,
       }}
     >
       {children}
